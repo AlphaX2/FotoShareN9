@@ -1,0 +1,10 @@
+
+[Desktop Entry]
+Encoding=UTF-8
+Version=1.0
+Type=Application
+Name=FotoShareN9
+Exec=invoker --single-instance --type=e /opt/FotoShareN9/fotoshareGUI.py
+Icon=/usr/share/icons/hicolor/80x80/apps/fotoshare.png
+Categories=Utility;
+Name[de_DE]=FotoShareN9

@@ -1,0 +1,9 @@
+Package: fotoshare
+Source: fotoshare
+Version: 0.9.5
+Architecture: armel
+Maintainer: Gabriel Boehme <m.gabrielboehme@googlemail.com>
+Installed-Size: 2000
+Depends: python-pyside.qtgui, python-pyside.qtopengl, python-pyside.qtdeclarative, python, python-qtmobility, python-crypto, python-pkg-resources, python-imaging
+Section: user/utilities
+Description: FotoShareN9 installation.
