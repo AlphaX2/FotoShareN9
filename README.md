@@ -24,9 +24,6 @@ Notes
 - If you want upload via SCP and a public key - the public key have to
 be named "fotoshare"!
 
-Build instructions
-==
-
 At the Terminal:
 ----------------
 cd /your/path/FotoShareN9/src/
@@ -42,6 +39,8 @@ dpkg-deb -b fotoshare_deb
 ar q fotoshare_deb.deb _aegis
 
 Now you can rename your deb file.
+
+------------------
 
 Last update: 08.06.2012
 
