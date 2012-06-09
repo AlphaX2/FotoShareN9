@@ -6,7 +6,7 @@ It allows the user to push all his shot pictures to Dropbox or a
 selectable server in the moment they are shot.
 
 This is the bunch of features:
-==
+==============================
 - Upload to Dropbox
 - Upload on a server
 - use ftp, sftp or scp for uploading
@@ -20,11 +20,17 @@ This is the bunch of features:
 - nice QML GUI
 
 Notes
-==
+=====
 - If you want upload via SCP and a public key - the public key have to
 be named "fotoshare"!
 
-At the Terminal:
+Build Information
+=================
+
+Copy fotoshareGUI.py, fotoshare_service and /qml to fotoshare_deb/opt
+than open a terminal
+
+At the terminal:
 ----------------
 - cd /your/path/FotoShareN9/src/
 
