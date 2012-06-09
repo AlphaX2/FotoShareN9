@@ -51,9 +51,7 @@ class FotoShareN9(QtCore.QObject):
 
         #returns the pid of a running daemon to self.pid
         self.getPID()
-
-        print "PID IS: "
-        print self.pid
+        print "The daemons PID is: "+str(self.pid)
 
         #set GUI Buttons etc. depending from settings ----------------
         #check for first start
@@ -85,22 +83,26 @@ class FotoShareN9(QtCore.QObject):
         self.APP_SECRET = '09sd2chtvifn5aj'
         self.ACCESS_TYPE = 'app_folder'
 
-        #Connections from Controller() class for QML/Py communication
+    #Connections from Controller() class for QML/Py communication
         self.controller.settings_saver.connect(self.save_settings)
         self.controller.settings_loader.connect(self.load_settings)
 
+        #Connection for daemon start
+        self.controller.daemon.connect(self.start_stop_daemon)
+
+        #Connection for daemon on boot option
+        self.controller.startupDaemon.connect(
+                                        self.activate_startup_daemon)
+
+        #Connection for resize switch/slider
         self.controller.resize_photos.connect(self.save_resize_option)
 
+        #Connections for option ButtonRow elements
         self.controller.notification_select.connect(self.save_notification_type)
-        self.controller.save_interval_time.connect(self.save_interval_times) #TIMES not TIME! ;)
         self.controller.video_select.connect(self.select_video_upload)
         self.controller.wifi3g_select.connect(self.select_wifi3g)
         self.controller.upload_type_select.connect(self.select_upload_type)
-
-
-        #Connections for daemon start/stop and start on boot
-        self.controller.daemon.connect(self.start_stop_daemon)
-        self.controller.startupDaemon.connect(self.activate_startup_daemon)
+        self.controller.save_interval_time.connect(self.save_interval_times) #TIMES not TIME! ;)
 
         #Test connections and settings set in GUI
         self.controller.contest.connect(self.test_connection)
@@ -112,19 +114,38 @@ class FotoShareN9(QtCore.QObject):
         self.controller.activate_log.connect(self.enable_log)
 
         #Dropbox authentification process stuff
-        self.controller.dropbox_authweb_signal.connect(self.get_dropbox_auth_weblink)
-        self.controller.dropbox_authsave_signal.connect(self.save_dropbox_auth_token)
-        self.controller.dropbox_unlink_signal.connect(self.unlink_dropbox_connection)
+        self.controller.dropbox_authweb_signal.connect(
+                                       self.get_dropbox_auth_weblink)
+
+        self.controller.dropbox_authsave_signal.connect(
+                                       self.save_dropbox_auth_token)
+
+        self.controller.dropbox_unlink_signal.connect(
+                                       self.unlink_dropbox_connection)
 
 # loading and saving settings ----------------------------------------
 
     def preload_settings(self):
-        #Preload all relevant data from settings:
+        """
+        Loading settings from cfg if possible, or load default settings.
+
+        If it was not able to load settings something went wrong, or 
+        there is just no file: load default settings. Also version
+        of last FotoShareN9 version is loaded and will later be checked
+        that there is no newer one - if so create new cfg.
+        """
+
+        # Preload all relevant data from settings:
         if os.path.isfile(self.config_path):
             f = open(self.config_path)
             l = pickle.load(f)
 
+            print "--------------------------------------------------"
+            print
+            print "These are the settings:"
+            print
             print l
+            print
 
             try:
                 self.server_adress = l['server']
@@ -148,8 +169,7 @@ class FotoShareN9(QtCore.QObject):
             except:
                 self.version = None
 
-            print "self version is:"
-            print self.version
+            print "Version is:"+str(self.version)
 
         else:
             self.server_adress = ''
@@ -172,88 +192,87 @@ class FotoShareN9(QtCore.QObject):
             self.resize = 0
 
 
-            print "self version is = FOTOSHARE_VERSION"
-            print self.version
-
     def is_first_start(self):
         """
         check for first start - set switch in QML UI
         """
 
-        #if os.path.isfile(self.config_path):
+        # if os.path.isfile(self.config_path):
         if self.server_adress == '' and self.db_sync_status == 'False':
-            print "First start"
-            #self.first_start = False
+            print "This is first start/no server settings."
             self.root.switchON('false')
         else:
-            print "Not first start"
-            #self.first_start = True
+            print "This is not first start: found server settings"
             self.root.switchON('true')
+
 
     def check_version(self):
         """
-        Check the version of cfg and creates a new one, if no version
+        Check the version of cfg and creates a new one if no version
         key can be found, or a new FotoShareN9 version is detected.
+        If there is a newer version detected, it will reset all data
+        to be sure that a new and working config is generated!
         """
 
         if self.version == None:
             print "No version controll found: create new cfg"
             self.reset_settings()
             self.root.switchON('false')
-            self.start_stop_daemon() #stop if running
+            self.start_stop_daemon() # stop daemon if running
         else:
             if not self.version == self.FOTOSHARE_VERSION:
-                print "New version of FotoShareN9: reset and create new cfg."
+                print "New FotoShareN9 version: reset and create new cfg."
                 self.reset_settings()
                 self.root.switchON('false')
-                self.start_stop_daemon() #stop if running
+                self.start_stop_daemon() # stop daemon if running
+
 
     def check_daemon_startup(self):
         """
-        If daemon is allowed to start on boot set slider on UI to show it
+        If daemon is allowed to start on boot set slider on UI to show it.
         """
 
-        print "daemon_startup: "
-        print self.daemon_startup
+        print "daemon_startup: "+str(self.daemon_startup)
 
         if self.daemon_startup == 'yes':
-            print "check startup slider: true"
+            print "Check startup slider: true"
             self.root.switchDaemonCHECK()
+
 
     def check_resize_options(self):
         """
-        Check if resize is active and set slider
+        Check if resize is active and set slider on GUI to show it.
         """
+
         if self.resize > 0:
-            print "resize erkannt"
+            print "Check resize slider: true"
             self.root.switchResizeCHECK(self.resize)
 
 
     def check_button_options(self):
         """
-        Checks selected options from ButtonRows on MainPage and set UI
+        Checks selected options from ButtonRows on MainPage and set GUI.
         """
 
-        #TODO: upload only / sync mode option
-
         if self.notification_type != 'off':
-            print "Notify type is:"
-            print self.notification_type
+            print "Notify type is: "+str(self.notification_type)
             self.root.notificationTypeButtonCHECKED(self.notification_type)
 
-        #check for instant/interval upload
+        # check for instant/interval upload
         if self.upload_type == 'interval':
             self.root.intervalUploadCHECKED(str(self.interval_time))
 
-        #check if videoupload is allowed
+        # check if videoupload is allowed
         if self.video_upload == 'allowed':
             self.root.videoUploadButtonCHECKED()
 
-        #check wifi only upload and set button
+        # check wifi only upload and set button
         if self.connection_radio == u'Wlan':
             self.root.wifiButtonCHECKED()
 
-        #check for server settings and enable option buttons or not
+        # check for server settings if there are no details filled in
+        # the buttons will stay disabled until the user fills in 
+        # something.
         if not self.server_adress == '' or not self.db_sync_status == 'False':
 
             self.root.switchDaemonONOFF()
@@ -264,7 +283,12 @@ class FotoShareN9(QtCore.QObject):
             self.root.videoUploadButtonENABLED()
             self.root.notificationTypeButtonENABLED()
 
+
     def check_log_file(self):
+        """
+        Set log file text in menu depending on the fact it is on/off
+        """
+
         if self.log == 'yes':
             self.root.updateLogText('yes')
         else:
@@ -273,21 +297,25 @@ class FotoShareN9(QtCore.QObject):
 
     def check_dropbox_link(self):
         """
-        check if Dropbox is linked or not and show on UI button
-        second arg is for Dropbox auth url, but not passed here.
+        Check if Dropbox is linked or not and show it on UI button.
         """
 
         if self.access_token == '' and self.access_secret == '':
-            print "not linked"
+            print "Dropbox: not linked"
+            print
             self.root.update_dropbox_auth_button('Link Dropbox', '')
         else:
-            print "linked"
+            print "Dropbox: linked"
+            print
             self.root.update_dropbox_auth_button('Unlink Dropbox', '')
+
 
     def load_settings(self):
         """
-        Loads saved settings and show them in the QML UI.
+        Load saved settings on GUI when "Server Settings" button is 
+        clicked and the SettingsPage loading.
         """
+
         print "Load settings"
         self.root.updateSettingsText(self.server_adress,
                                      self.server_folder,
@@ -301,19 +329,19 @@ class FotoShareN9(QtCore.QObject):
 
     def save_settings(self, server, path, user, passw, connect, port):
         """
-        Saves settings, which are set in the QML UI SettingsPage
+        Saves settings, which are set in the GUI SettingsPage.
         """
 
-        #path should be without root "/" so terminate it here
+        # path should be without root "/" so terminate it here
         if path.startswith('/'):
             path = path[1:]
 
-        #If not a server is selected changes connection type to "" for
-        #preventing errors.
+        # If not a server is selected changes connection type to "" for
+        # preventing errors like senseless upload tries.
         if not server:
             connect = ''
 
-        #update arguments for running app/window class
+        # update arguments for running app/window class
         self.server_adress = str(server)
         self.server_folder = str(path)
         self.server_user = str(user)
@@ -321,7 +349,7 @@ class FotoShareN9(QtCore.QObject):
         self.connection_type = str(connect)
         self.server_port = str(port)
 
-        #load config file or create a new one
+        # load config file or create a new one
         if os.path.isfile(self.config_path):
             f = open(self.config_path)
             l = pickle.load(f)
@@ -359,7 +387,7 @@ class FotoShareN9(QtCore.QObject):
         l['pass'] = str(passw)
         l['connection'] = str(connect)
 
-        #save config
+        # save config
         f = open(self.config_path, 'w')
         pickle.dump(l,f)
         f.close()
@@ -377,7 +405,7 @@ class FotoShareN9(QtCore.QObject):
             l['interval_time'] = int(time)
             print "Interval upload time is now: "+str(time)+" Minutes."
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
@@ -395,7 +423,7 @@ class FotoShareN9(QtCore.QObject):
             l['notification_type'] = str(typus)
             print "Notification type is now: "+str(typus)
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
@@ -416,7 +444,7 @@ class FotoShareN9(QtCore.QObject):
 
             print "Is log active? "+str(self.log)
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
@@ -449,7 +477,6 @@ class FotoShareN9(QtCore.QObject):
 
 
     def save_resize_option(self, percent):
-        print "resize function"
         """
         Saves the selected resize option
         """
@@ -463,17 +490,11 @@ class FotoShareN9(QtCore.QObject):
 
             print "Resize is now: "+str(self.resize)+" %"
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
 
-
-    def select_sync_type(self, sync):
-        """
-        Saves the setting from GUI: 'Upload only' vs. 'Sync'
-        """
-        pass
 
     def select_video_upload(self, typus):
         """
@@ -487,10 +508,11 @@ class FotoShareN9(QtCore.QObject):
             l['video_upload'] = typus
             print "Video upload is now: "+str(typus)
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
+
 
     def select_upload_type(self, typus):
         """
@@ -504,10 +526,11 @@ class FotoShareN9(QtCore.QObject):
             l['upload_type'] = typus
             print "Upload type is now: "+str(typus)
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
+
 
     def select_wifi3g(self, radio):
         """
@@ -521,26 +544,24 @@ class FotoShareN9(QtCore.QObject):
             l['data_connection'] = radio
             print "Upload is now: "+str(radio)
 
-            #save config
+            # save config
             f = open(self.config_path, 'w')
             pickle.dump(l,f)
             f.close()
 
 
-#main functions ------------------------------------------------------
+# main functions -----------------------------------------------------
 
     def getPID(self):
         """
         Parses the pid of the fotoshare_service daemon and set the
-        number to self.pid, also updates daemon on startup switch
-        in the QML UI MainPage.
+        number to self.pid. Also updates switch in the GUI if it is
+        running on app start.
         """
 
         cmd = 'ps aux|grep python'
         pid = os.popen(cmd)
         data = pid.readlines()
-
-        print data
 
         for i in data:
             if 'fotoshare_service' in i:
@@ -548,6 +569,7 @@ class FotoShareN9(QtCore.QObject):
                 self.pid = daemon_pid[0]
                 self.root.switchCHECKED('true')
                 print 'Daemons pid is: '+daemon_pid[0]
+
 
     def get_hostkey(self, hostname):
         """
@@ -561,13 +583,8 @@ class FotoShareN9(QtCore.QObject):
             host_keys = paramiko.util.load_host_keys(
                              os.path.expanduser('~/.ssh/known_hosts'))
         except IOError:
-            try:
-                #try ~/ssh/ too, because windows can't have a folder named ~/.ssh/
-                host_keys = paramiko.util.load_host_keys(
-                              os.path.expanduser('~/ssh/known_hosts'))
-            except IOError:
-                print '*** Unable to open host keys file'
-                host_keys = {}
+            print '*** Unable to open host keys file'
+            host_keys = {}
 
         if host_keys.has_key(hostname):
             hostkeytype = host_keys[hostname].keys()[0]
@@ -593,40 +610,49 @@ class FotoShareN9(QtCore.QObject):
 
     def activate_startup_daemon(self):
         """
-        QML UI option (Switch) about starting daemon on boot or not.
+        Python logic of QML Switch for starting daemon on boot or not.
 
         Sets an entry in fotoshare.cfg (yes/no) which holds the info
-        about the daemon is allowed to run from boot or not. It is
-        also read by the daemon on startup, if set to "no" the daemon
+        about the daemon is allowed to run from boot or not. It will
+        also be read by the daemon on startup, if set to "no" the daemon
         stops, otherwise stays on.
         """
 
         print "activate_startup_daemon"
 
         if os.path.isfile(self.config_path):
-            #Laden der gespeicherten Werte
+            # Laden der gespeicherten Werte
             f = open(self.config_path)
             l = pickle.load(f)
 
             daemon = l['daemon_startup']
             print daemon
 
-            #'yes' and 'no' is used, because True/False didn't work.
+            # 'yes' and 'no' is used, because True/False didn't work.
             if daemon == 'yes':
                 status = ''
             if daemon == '':
                 status = 'yes'
 
-            print status
+            print "Daemon startup is set to: "+status
 
             l['daemon_startup'] = status
 
-        #Save data
+        # Save data
         f = open(self.config_path, 'w')
         pickle.dump(l,f)
         f.close()
 
-#Dropbox Handling-----------------------------------------------------
+# Dropbox Handling----------------------------------------------------
+
+#    Here you find three different functions:
+#    1. generate a Dropbox authentication link
+#    2. save tokens you got from Dropbox
+#    3. Unlink Dropbox => delete tokens and clear Dropbox settings
+
+#    It's handled by the Dropbox authentication button in QML so have
+#    also a look there!
+
 
     def get_dropbox_auth_weblink(self):
         """
@@ -634,15 +660,18 @@ class FotoShareN9(QtCore.QObject):
         link on the GUI.
         """
 
-        #if user want to authenticate
         print "Dropbox auth"
-        self.drop_session = dropbox.session.DropboxSession(self.APP_KEY,
-                                                           self.APP_SECRET,
-                                                           self.ACCESS_TYPE)
+        self.drop_session = dropbox.session.DropboxSession(
+                                                     self.APP_KEY,
+                                                     self.APP_SECRET,
+                                                     self.ACCESS_TYPE)
+
         self.request_token = self.drop_session.obtain_request_token()
         url = self.drop_session.build_authorize_url(self.request_token)
-        #URL is only passed here to GUI
+
+        # URL is only passed to GUI here
         self.root.update_dropbox_auth_button("Ok", url)
+
 
     def save_dropbox_auth_token(self):
         """
@@ -651,9 +680,16 @@ class FotoShareN9(QtCore.QObject):
 
         print "Dropbox save"
         # This will fail if the user didn't visit the Auth-URL and hit 'Allow'
-        self.access_token = self.drop_session.obtain_access_token(self.request_token)
-        self.save_dropbox_settings(self.access_token.key, self.access_token.secret)
+        self.access_token = self.drop_session.obtain_access_token(
+                                                   self.request_token)
+
+        self.save_dropbox_settings(
+                                    self.access_token.key,
+                                    self.access_token.secret)
+
+        # second argument is "" to have no link text anymore on GUI
         self.root.update_dropbox_auth_button('Unlink Dropbox', "")
+
 
     def unlink_dropbox_connection(self):
         """
@@ -661,17 +697,21 @@ class FotoShareN9(QtCore.QObject):
         """
 
         print "Dropbox unlink"
-        #If user want to destroy the connection from app to dropbox
+        # If user want to destroy the connection from app to dropbox
         self.drop_session = None
         self.save_dropbox_settings('', '')
         self.root.update_dropbox_auth_button('Link Dropbox', '')
 
+
     def save_dropbox_settings(self, access_token, access_secret):
         """
         Saves Dropbox access token informations from authentification.
+
+        If there is no settings file a new one will be created and
+        filled up with default settings.
         """
 
-        #load config file or create a new one
+        # load config file or create a new one
         if os.path.isfile(self.config_path):
             f = open(self.config_path)
             l = pickle.load(f)
@@ -705,21 +745,23 @@ class FotoShareN9(QtCore.QObject):
         l['db_access_token'] = str(access_token)
         l['db_access_secret'] = str(access_secret)
 
-        #Update them to be sure the open app has the newest informations.
+        # Update them to be sure the open app has the newest informations.
         self.access_token = str(access_token)
         self.access_secret = str(access_secret)
 
-        #db_sync_status allows to sync only DB or DB+webserver!
+        # Dropbox is not saved as connection type to allow the user
+        # to sync both - Dropbox and a server as well.
+
         if self.access_token == '' and self.access_secret == '':
             l['db_sync'] = 'False'
             self.db_sync_status = 'False'
-            print self.db_sync_status
+            print "Will Dropbox sync? "+str(self.db_sync_status)
         else:
             l['db_sync'] = 'True'
             self.db_sync_status = 'True'
-            print self.db_sync_status
+            print "Will Dropbox sync? "+str(self.db_sync_status)
 
-        #save config
+        # save config
         f = open(self.config_path, 'w')
         pickle.dump(l,f)
         f.close()
@@ -731,29 +773,20 @@ class FotoShareN9(QtCore.QObject):
         Function tests the settings and connection type set on the UI
         """
 
-        #load server settings
-        print 'Connection type is: '+con_type
-        print self.server_adress
-        print self.server_folder
-        print self.server_user
-        print self.server_pass
-        print self.connection_type
-        print self.server_port
-
-        #Try to connect via ftp TODO: add port to ftp-login
+        # Try to connect via ftp
         if con_type == 'ftp':
-            print 'Testing ftp'
+            print 'Testing ftp connection...'
             try: 
-                self.ftp = ftplib.FTP()#self.server_adress)
+                self.ftp = ftplib.FTP()
                 self.ftp.connect(self.server_adress, self.server_port)
                 self.ftp.getwelcome()
                 self.root.callConnectionDialog('ok')
             except:
                 self.root.callConnectionDialog('fail')
 
-        #Try to connect via sftp
+        # Try to connect via sftp
         if con_type == 'sftp':
-            'Testing sftp'
+            'Testing sftp connection...'
             self.get_hostkey(self.server_adress)
             try:
                 t = paramiko.Transport((self.server_adress, 
@@ -770,18 +803,21 @@ class FotoShareN9(QtCore.QObject):
             except:
                 self.root.callConnectionDialog('fail')
 
-        #Try to connect via scp
+        # Try to connect via scp
         if con_type == 'scp':
-            print 'Testing scp'
+            print 'Testing scp connection...'
 
             test = '/opt/FotoShareN9/scp_test_file'
             dest = self.server_user+'@'+self.server_adress+':/'+self.server_folder
 
             self.get_hostkey(self.server_adress)
 
-            #get number of files at .ssh for checking "fotoshare" key is in it
+            # Get files at .ssh for checking "fotoshare" named
+            # publickey is in it.
             files_at_ssh = os.listdir('/home/user/.ssh')
 
+            # check if there is .ssh - if not create known_hosts and
+            # login via normal password.
             if not os.path.isdir('/home/user/.ssh'):
                 print "scp: no ~/.shh found"
                 try:
@@ -797,6 +833,7 @@ class FotoShareN9(QtCore.QObject):
                     print "SCP: except @ no .ssh dir"
                     self.root.callConnectionDialog('fail')
 
+            # Without "fotoshare" publickey use normal password login.
             if self.hostkey and not 'fotoshare' in files_at_ssh:
                 print "scp: no publickey found"
                 try:
@@ -809,11 +846,12 @@ class FotoShareN9(QtCore.QObject):
                     print "SCP: except @ known_hosts only"
                     self.root.callConnectionDialog('fail')
 
+            # Use publickey for upload (password means passphrase)
             if self.hostkey and 'fotoshare' in files_at_ssh:
                 print "scp: publickey found"
                 try:
                     scp = pexpect.spawn('scp %r %r' %(test, dest))
-                    #FotoShareN9 accept only a public key with the name "fotoshare"
+                    # FotoShareN9 accept only a public key with the name "fotoshare"
                     scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
                     scp.sendline(self.server_pass)
                     scp.wait()
@@ -823,50 +861,68 @@ class FotoShareN9(QtCore.QObject):
                     self.root.callConnectionDialog('fail')
 
 
-        #Try to connect via Dropbox
+        # Try to connect via Dropbox
         if self.db_sync_status == 'True':
-            print 'testing dropbox'
+            print 'Testing Dropbox connection...'
+
             try:
-                session = dropbox.session.DropboxSession(self.APP_KEY, self.APP_SECRET, self.ACCESS_TYPE)
-                session.set_token(self.access_token, self.access_secret)
+                session = dropbox.session.DropboxSession(
+                                                    self.APP_KEY,
+                                                    self.APP_SECRET,
+                                                    self.ACCESS_TYPE)
+
+                session.set_token(self.access_token,
+                                    self.access_secret)
+
                 client = dropbox.client.DropboxClient(session)
+                #print is used as a real part of the test!
                 print client.account_info()
                 self.root.callConnectionDialog('ok')
+
             except:
                 self.root.callConnectionDialog('fail')
 
-#Controller Class for QML to Python communication---------------------
 
+# Controller Class for QML to Python communication--------------------
 class Controller(QtCore.QObject):
     """
     Controller class is connected to QML and receives signals, which
     are send from QML and connects them to Python functions.
     """
+
+    # Dropbox related signals
     dropbox_authweb_signal = QtCore.Signal()
     dropbox_authsave_signal = QtCore.Signal()
     dropbox_unlink_signal = QtCore.Signal()
 
+    # Save/load putted in settings from GUI
     settings_saver = QtCore.Signal(str, str, str, str, str, str)
     settings_loader = QtCore.Signal()
-    save_interval_time = QtCore.Signal(str)
-    upload_type_select = QtCore.Signal(str)
-    wifi3g_select = QtCore.Signal(str)
-    video_select = QtCore.Signal(str)
-    notification_select = QtCore.Signal(str)
-    resize_photos = QtCore.Signal(int)
 
-    activate_log = QtCore.Signal()
+    # MainPage switches and buttons
     daemon = QtCore.Signal()
     startupDaemon = QtCore.Signal()
+    resize_photos = QtCore.Signal(int)
 
-    #connection test
+    notification_select = QtCore.Signal(str)
+    video_select = QtCore.Signal(str)
+    wifi3g_select = QtCore.Signal(str)
+    upload_type_select = QtCore.Signal(str)
+    save_interval_time = QtCore.Signal(str)
+
+    # Connection test from SettingsPage
     contest = QtCore.Signal(str)
 
+    # Menu Options
+    activate_log = QtCore.Signal()
     settings_reset = QtCore.Signal()
+
 
     def __init__(self):
         QtCore.QObject.__init__(self)
 
+
+    # Dropbox related signals
     @QtCore.Slot(str)
     def auth_dropbox_signal(self, status):
         if status == "web":
@@ -876,6 +932,8 @@ class Controller(QtCore.QObject):
         if status == "unlink":
             self.dropbox_unlink_signal.emit()
 
+
+    # Save and load settings from SettingsPage GUI
     @QtCore.Slot(str, str, str, str, str, str)
     def save_settings_signal(self, server, path, user, passw, connect, port):
         self.settings_saver.emit(server, path, user, passw, connect, port)
@@ -884,34 +942,50 @@ class Controller(QtCore.QObject):
     def load_settings_signal(self):
         self.settings_loader.emit()
 
+
+    # MainPage switches
+    @QtCore.Slot()
+    def start_daemon_signal(self):
+        self.daemon.emit()
+
+    @QtCore.Slot()
+    def activate_startup_daemon_signal(self):
+        self.startupDaemon.emit()
+
+    @QtCore.Slot(int)
+    def resize_photos_signal(self, percent):
+        self.resize_photos.emit(percent)
+
+
+    # MainPage buttons
     @QtCore.Slot(str)
-    def save_interval_time_signal(self, time):
-        self.save_interval_time.emit(time)
+    def notification_select_signal(self, typus):
+        self.notification_select.emit(typus)
 
     @QtCore.Slot(str)
-    def upload_type_select_signal(self, typus):
-        self.upload_type_select.emit(typus)
+    def video_select_signal(self, typus):
+        self.video_select.emit(typus)
 
     @QtCore.Slot(str)
     def wifi3g_select_signal(self, radio):
         self.wifi3g_select.emit(radio)
 
     @QtCore.Slot(str)
-    def video_select_signal(self, typus):
-        self.video_select.emit(typus)
+    def upload_type_select_signal(self, typus):
+        self.upload_type_select.emit(typus)
 
-    @QtCore.Slot()
-    def start_daemon_signal(self):
-        self.daemon.emit()
+    @QtCore.Slot(str)
+    def save_interval_time_signal(self, time):
+        self.save_interval_time.emit(time)
 
+
+    # Connection Test from SettingsPage
     @QtCore.Slot(str)
     def test_connection_signal(self, con_type):
         self.contest.emit(con_type)
 
-    @QtCore.Slot()
-    def activate_startup_daemon_signal(self):
-        self.startupDaemon.emit()
 
+    # Menu options
     @QtCore.Slot()
     def settings_reset_signal(self):
         self.settings_reset.emit()
@@ -920,15 +994,9 @@ class Controller(QtCore.QObject):
     def enable_log_file_signal(self):
         self.activate_log.emit()
 
-    @QtCore.Slot(str)
-    def notification_select_signal(self, typus):
-        self.notification_select.emit(typus)
 
-    @QtCore.Slot(int)
-    def resize_photos_signal(self, percent):
-        self.resize_photos.emit(percent)
 
-#Starting the app ----------------------------------------------------
+# Starting the app ---------------------------------------------------
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
     start = FotoShareN9()

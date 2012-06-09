@@ -45,12 +45,13 @@ PageStackWindow {
 
     function switchResizeONOFF() {
         console.log("QML: switchResize will be enabled")
-            mainPage.switcherResizeENABLE = true; 
+        mainPage.switcherResizeENABLE = true
     }
 
     function switchResizeCHECK(size) {
-            mainPage.switcherResizeCHECK = true;
-            mainPage.resizeSliderValue = size
+        console.log("QML: Resize Slider is set to: "+size)
+        mainPage.switcherResizeCHECK = true;
+        mainPage.resizeSliderValue = size
     }
 
     function uploadTypeButtonENABLED() {
@@ -60,8 +61,7 @@ PageStackWindow {
 
     function intervalUploadCHECKED(time) {
         mainPage.intervalButtonCHECK = true
-        console.log("intervalUploadCHECKED")
-        console.log(time)
+        console.log("QML: Interval is set to: "+time)
         if (time === "5"){mainPage.interval5 = true}
         if (time === "10"){mainPage.interval10 = true}
         if (time === "15"){mainPage.interval15 = true}

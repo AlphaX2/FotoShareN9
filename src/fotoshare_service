@@ -21,8 +21,6 @@ from QtMobility.SystemInfo import QSystemNetworkInfo
 from PySide import QtCore
 from PySide.QtCore import QTimer
 
-from daemon import Daemon
-
 class NewFotoCheck:
     def __init__(self):
         print
