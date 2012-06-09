@@ -27,7 +27,7 @@ be named "fotoshare"!
 Build Information
 =================
 
-Copy fotoshareGUI.py, fotoshare_service and /qml to fotoshare_deb/opt
+Copy fotoshareGUI.py, fotoshare_service and /qml to fotoshare_deb/opt/FotoShareN9 folder
 than open a terminal
 
 At the terminal:
