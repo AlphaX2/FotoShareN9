@@ -41,6 +41,8 @@ At the terminal:
 - sudo chmod a+x fotoshare_deb/opt/FotoShareN9/fotoshareGUI.py
 - sudo chmod a+x fotoshare_deb/opt/FotoShareN9/fotoshare_service
 
+- python digsigsums.py fotoshare_deb
+
 - dpkg-deb -b fotoshare_deb
 - ar q fotoshare_deb.deb _aegis
 
