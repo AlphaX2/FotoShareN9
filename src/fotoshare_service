@@ -4,18 +4,19 @@
 import os
 import sys
 import ftplib
-import paramiko
-import pexpect
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 import pickle
 import subprocess
 import urllib2
 import dropbox
-import mnotification as notify
 from time import ctime
 import PIL
 from PIL import Image
+
+import paramiko
+import pexpect
+import mnotification as notify
 
 from QtMobility.SystemInfo import QSystemNetworkInfo
 from PySide import QtCore
@@ -27,9 +28,9 @@ class NewFotoCheck:
         print "-== FOTOSHARE N9 DAEMON ==-"
         print
 
-#Standard init--------------------------------------------------------
+# Standard init-------------------------------------------------------
 
-        #Stop daemon if there is no settings file
+        # Stop daemon if there is no settings file
         if os.path.isfile('/home/user/.config/fotoshare.cfg'):
             print "Found config file. Load settings now..."
             self.load_settings()
@@ -37,66 +38,67 @@ class NewFotoCheck:
             print "No config file: Daemon stops."
             sys.exit(0)
 
-        #Without connection details for server nor Dropbox - stop daemon!
+        # Without connection details: stop daemon!
         if not self.connection and self.db_sync_status == 'False':
-            print "No connection details, stopping."
+            print "No connection details: stopping."
             sys.exit(0)
 
-        #If true user starts daemon from UIs switch - allowed! ;)
+        # If true user starts daemon from UIs switch - allowed! ;)
         print "Check Daemon startup type:"
         if self.check_startup_from_UI():
             print "Daemon started from UI."
             pass
-        #If not and if not allowed to boot on start - stop it!
+        # If not and if not allowed to boot on start - stop it!
         else:
             print "Daemon starts on boot/via terminal!"
             if self.daemon_status == '':
-                print 'Daemon not allowed to start - killed.'
+                print 'Daemon not allowed to start: stop!'
                 sys.exit(0)
 
-
-        #Timer loads up pics later if N9 is offline when they are shot
+        # Timer loads up pics later if N9 is offline when they are shot
         self.offline_timer = QTimer()
         self.offline_timer.timeout.connect(self.try_offline_pic_upload)
 
-        #Timer loads up pics later if user selected interval upload
+        # Timer loads up pics later if user selected interval upload
         self.interval_timer = QTimer()
 
-        #Video allowed or not
-        self.video_allowed = 'forbidden'
-
-        #Try to upload if N9 was offline and a picture could not
-        #uploaded and N9/Daemon switched off and the pics waiting
+        # Try to upload if N9 was offline and a picture could not
+        # uploaded and N9/Daemon switched off and the pics waiting
         if os.path.isfile('/home/user/.config/fotoshare_offline.sav'):
             print "Maybe some pics not uploaded so far - checking it!"
             self.try_offline_pic_upload()
 
-        #DBUS Init----------------------------------------------------
+        # DBUS Init---------------------------------------------------
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
         self.bus = dbus.SessionBus()
+
         try:
             # Get the remote object
-            self.remote_object = self.bus.get_object('com.nokia.maemo.CameraService','/', follow_name_owner_changes=True)
+            self.remote_object = self.bus.get_object(
+                                    'com.nokia.maemo.CameraService', 
+                                    '/',
+                                    follow_name_owner_changes=True)
+
             # Get the remote interface for the remote object
-            self.iface = dbus.Interface(self.remote_object, 'com.nokia.maemo.meegotouch.CameraInterface')
+            self.iface = dbus.Interface(self.remote_object,
+                         'com.nokia.maemo.meegotouch.CameraInterface')
 
         except dbus.DBusException:
             print_exc()
             sys.exit(1)
 
-        self.iface.connect_to_signal('captureCompleted', self.init_upload_steps)
+        self.iface.connect_to_signal('captureCompleted',
+                                               self.init_upload_steps)
 
-    #Main functions --------------------------------------------------
+    # Main functions -------------------------------------------------
     def check_startup_from_UI(self):
         """
         Checks for daemon is started from autostart or GUI.
         If daemon starts via boot, it will be checked if he is allowed
-        to start on boot (self.daemon_status) if not daemon stops itself.
-        If daemon starts from UI (means UI is running) it will not stop, 
-        because in this case, it has to run!
+        to start on boot (self.daemon_status) if not daemon stops 
+        itself. If daemon starts from UI (means UI is running) it will
+        not stop, because in this case, it has to run!
         """
-
-        print "check_startup_from_UI runs..."
 
         cmd = 'ps aux| grep python'
         pid = os.popen(cmd)
@@ -107,7 +109,7 @@ class NewFotoCheck:
             print type(i)
 
             if 'fotoshareGUI' in str(i):
-                print "found GUI running"
+                print "Found running GUI"
                 return True
                 break
 
@@ -120,17 +122,21 @@ class NewFotoCheck:
         f = open('/home/user/.config/fotoshare.cfg')
         l = pickle.load(f)
 
+        print
+        print "These are the settings"
+        print
         print l
+        print
 
-        #holds picture names, that are not uploaded yet 
-        #(interval upload selected)
+        # holds picture names, that are not uploaded yet 
+        # (interval upload selected)
         self.interval_waiting_list = []
 
-        #holds pictures names, that are not uploaded yet
-        #(offline when shot)
+        # holds pictures names, that are not uploaded yet
+        # (offline when shot)
         self.offline_picture_list = []
 
-        #normal settings
+        # normal settings
         self.server_adress = l['server']
         self.server_port = l['port']
         self.server_folder = l['path'] 
@@ -147,6 +153,7 @@ class NewFotoCheck:
         self.log = l['log']
         self.notification_type = l['notification_type']
         self.resize = l['resize']
+        self.video_allowed = l['video_upload']
 
         print "hostkey (setting)"
         self.hostkey = False
@@ -156,7 +163,7 @@ class NewFotoCheck:
         self.hostkeytype = False
         print self.hostkeytype
 
-        #Dropbox API stuff
+        # Dropbox API stuff
         self.APP_KEY = 'uvxyouqhkdljbdn'
         self.APP_SECRET = '09sd2chtvifn5aj'
         self.ACCESS_TYPE = 'app_folder'
@@ -180,15 +187,8 @@ class NewFotoCheck:
             host_keys = paramiko.util.load_host_keys(
                              os.path.expanduser('~/.ssh/known_hosts'))
         except IOError:
-            #try ~/ssh/ too, because windows can't have a folder named ~/.ssh/
-            try:
-                host_keys = paramiko.util.load_host_keys(
-                              os.path.expanduser('~/ssh/known_hosts'))
-            except IOError:
-                print '*** Unable to open host keys file'
-                host_keys = {}
-
-        print host_keys
+            print '*** Unable to open host keys file'
+            host_keys = {}
 
         if host_keys.has_key(hostname):
             hostkeytype = host_keys[hostname].keys()[0]
@@ -214,7 +214,12 @@ class NewFotoCheck:
         status = status.split('.')
         return status[-1] == 'Connected'
 
+
     def write_log_data(self, name, status, connection, error=''):
+        """
+        Writes given informations in the log file at MyDocs.
+        """
+
         if status == 'success':
             string = str(ctime())+':'+name+' was successfuly uploaded via '+connection+'\n'
         else:
@@ -227,18 +232,48 @@ class NewFotoCheck:
             log.write(string)
 
 
+# Main upload functions ----------------------------------------------
+
+    def connect_ftp(self):
+        """
+        Connects to the ftp server with known settings.
+        """
+        self.ftp = ftplib.FTP()
+        self.ftp.connect(self.server_adress, self.server_port)
+        self.ftp.login(self.server_user, self.server_pass)
+        self.ftp.cwd(self.server_folder)
+
+
+    def connect_sftp(self):
+        """
+        Connects to the FTP Server via sFTP from paramiko module
+        """
+
+        self.get_hostkey(self.server_adress)
+        self.sftp_transport = paramiko.Transport((self.server_adress,
+                                              int(self.server_port)))
+
+        self.sftp_transport.connect(username=self.server_user,
+                                    password=self.server_pass,
+                                    hostkey=self.hostkey)
+
+        self.sftp = paramiko.SFTPClient.from_transport(self.sftp_transport)
+        self.sftp.chdir(self.server_folder)
+
+
     def init_upload_steps(self, arg1, data):
         """
         Init the upload process and starts relevant upload functions
 
         How it works:
-        first of all it's getting DBUS signal strings, so arg1 is useless,
-        but data is the name and path of the picture and will be used.
+        first of all it's getting DBUS signal strings, so arg1 is 
+        useless, but data is the name and path of the picture and will
+        be used.
 
-        Maybe the user want a resized picture - so do that, save it and
-        make the path to the smaller sized version the new "data" string,
-        which holds the whole path to the file and is used in all further
-        steps.
+        Maybe the user want a resized picture - so do that, save it 
+        and make the path to the smaller sized version the new "data"
+        string, which holds the whole path to the file and is used in 
+        all further steps.
 
         Next step is to checks if the user selected interval upload,
         if yes, it collects the pic names/paths in a waiting list and
@@ -247,6 +282,7 @@ class NewFotoCheck:
         If no interval upload is selected, it just start normal upload
         process.
         """
+
         print "Init upload and prepare data."
 
         filename = os.path.split(data)
@@ -256,7 +292,7 @@ class NewFotoCheck:
         if self.resize > 0:
             print "Resize is wanted!"
 
-            small_pic_path = "/home/user/MyDocs/DCIM/FotoShareN9_small/"
+            small_pic_path="/home/user/MyDocs/DCIM/FotoShareN9_small/"
 
             if not os.path.isdir(small_pic_path):
                 os.makedirs(small_pic_path)
@@ -270,19 +306,19 @@ class NewFotoCheck:
             percent = percent * 0.01
             print str(percent)+" %"
 
-            #open original picture from DBUS signal string
+            # open original picture from DBUS signal string
             img = Image.open(data_old)
-            #claculate new height and width
+            # claculate new height and width
             new_width = float((img.size[0])) * percent
             new_height = float((img.size[1])) * percent
 
-            #resize the picture
+            # resize the picture
             img = img.resize((int(new_width), int(new_height)), PIL.Image.ANTIALIAS)
 
-            #save smaller version of the picture
+            # save smaller version of the picture
             img.save(small_pic_path+filename)
 
-        #is picture OR video but video is allowed
+        # Is the file a picture OR a video, and is video allowed
         if video_check[1] == 'jpg' or (video_check[1] == 'mp4' and self.video_allowed == 'allowed'):
             # sets pics on an waiting list, due to the interval upload feature
             if self.upload_type == 'interval':
@@ -295,7 +331,7 @@ class NewFotoCheck:
                 else:
                     print "setting interval_timer to:"+str(self.interval_time)
                     self.interval_timer.timeout.connect(self.start_interval_upload)
-                    #multiply with 60.000 to convert minutes to milliseconds
+                    # multiply with 60.000 to convert minutes to milliseconds
                     self.interval_timer.start(self.interval_time*60000)
             else:
                 self.start_upload(data)
@@ -310,9 +346,7 @@ class NewFotoCheck:
         Uploads all pictures in the waiting list via a for-iteration.
         """
 
-        #TODO: kick out maybe no need to have it here
-        #stop the interval timer, cause it started this function and
-        #this means it's time to upload now. ;)
+        # To be sure the timer is stoped, it's done here.
         if self.interval_timer.isActive():
             print "Stopping timer"
             self.interval_timer.stop()
@@ -320,7 +354,7 @@ class NewFotoCheck:
         galerie_list = os.listdir("/home/user/MyDocs/DCIM")
         waiting_pics_tmp = []
 
-        #create a temp list with pathless data names
+        # create a temp list with pathless data names
         for pics in self.interval_waiting_list:
             var = os.path.split(pics)
             var = var[-1]
@@ -328,7 +362,8 @@ class NewFotoCheck:
 
         print waiting_pics_tmp
 
-        #check if pics from (temp) waiting list still in galery
+        # checks that pics from (temporary) waiting list still in 
+        # gallery, if not - no upload will happen.
         for pic in waiting_pics_tmp:
             if not pic in galerie_list:
                 print "Entferne: /home/user/MyDocs/DCIM/"+pic
@@ -344,7 +379,7 @@ class NewFotoCheck:
         Start normal upload function. Check for WLAN only upload before.
         """
 
-        #check if the user want wifi only upload
+        # check if the user want wifi only upload
         if self.data_connection == 'Wlan':
             if self.check_is_wlan():
                 print "FotoShareN9 is uploading via Wifi!"
@@ -361,8 +396,6 @@ class NewFotoCheck:
         """
         Uploads pictures to ftp/sftp/scp server or your Dropbox.
         """
-        print "Upload function"
-        print data
 
         f = open(data, 'r')
         name = os.path.split(data)
@@ -415,7 +448,7 @@ class NewFotoCheck:
 
                 self.get_hostkey(self.server_adress)
 
-                #get files at .ssh - "fotoshare" would be the public key
+                # get files at .ssh - "fotoshare" would be the public key
                 files_at_ssh = os.listdir('/home/user/.ssh')
 
                 if not os.path.isdir('/home/user/.ssh'):
@@ -440,11 +473,8 @@ class NewFotoCheck:
                     print "scp: no publickey found"
                     try:
                         scp = pexpect.spawn('scp %r %r' %(str(data), dest))
-                        print "1"
                         scp.expect(self.server_user+'@'+self.server_adress+"'s password:")
-                        print "2"
                         scp.sendline(self.server_pass)
-                        print "3"
                         scp.wait()
 
                         self.show_notification(name, 'scp')
@@ -459,7 +489,7 @@ class NewFotoCheck:
                     print "scp: publickey found"
                     try:
                         scp = pexpect.spawn('scp %r %r' %(str(data), dest))
-                        #FotoShareN9 accept only a public key with the name "fotoshare"
+                        # FotoShareN9 accept only a public key with the name "fotoshare"
                         scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
                         scp.sendline(self.server_pass)
                         scp.wait()
@@ -475,8 +505,7 @@ class NewFotoCheck:
             except:
                 if self.log == 'yes':
                     self.write_log_data(name, 'fail', 'scp',
-                    'All kinds three of SCP uploading failed. Maybe it helps to reset FotoShareN9.'
-                    )
+                    'All kinds three of SCP uploading failed. Maybe it helps to reset FotoShareN9.')
 
 
         if self.db_sync_status == 'True':
@@ -510,32 +539,7 @@ class NewFotoCheck:
         print "--- FOTOUPLOAD ENDE ---"
 
 
-    def connect_ftp(self):
-        """
-        Connects to the ftp server with known settings.
-        """
-        self.ftp = ftplib.FTP()
-        self.ftp.connect(self.server_adress, self.server_port)
-        self.ftp.login(self.server_user, self.server_pass)
-        self.ftp.cwd(self.server_folder)
-
-
-    def connect_sftp(self):
-        """
-        Connects to the FTP Server via sFTP from paramiko module
-        """
-
-        self.get_hostkey(self.server_adress)
-        self.sftp_transport = paramiko.Transport((self.server_adress,
-                                              int(self.server_port)))
-
-        self.sftp_transport.connect(username=self.server_user,
-                                    password=self.server_pass,
-                                    hostkey=self.hostkey)
-
-        self.sftp = paramiko.SFTPClient.from_transport(self.sftp_transport)
-        self.sftp.chdir(self.server_folder)
-
+# Offline exception handling -----------------------------------------
 
     def offline_except_handler(self, data):
         """
@@ -555,7 +559,6 @@ class NewFotoCheck:
             pickle.dump(self.offline_picture_list, f)
             f.close()
         else:
-            #create a *.cfg with pickle
             f = open('/home/user/.config/fotoshare_offline.sav', 'w')
             pickle.dump(self.offline_picture_list,f)
             f.close()
@@ -564,7 +567,7 @@ class NewFotoCheck:
             print "offline_timer is running, nothing is done."
         else:
             print "offline_timer is set to 20 min."
-            #1.2 mio. sec = 20 mins.
+            # 1.2 mio. sec = 20 mins. (time is hard coded)
             self.offline_timer.start(1200000)
 
 
@@ -577,7 +580,6 @@ class NewFotoCheck:
         """
 
         if os.path.isfile('/home/user/.config/fotoshare_offline.sav'):
-            #Laden der gespeicherten Werte
             f = open('/home/user/.config/fotoshare_offline.sav')
             l = pickle.load(f)
 
@@ -626,7 +628,7 @@ class NewFotoCheck:
 
                     self.get_hostkey(self.server_adress)
 
-                    #get number of files at .ssh for checking "fotoshare" key is in it
+                    # get number of files at .ssh for checking "fotoshare" key is in it
                     files_at_ssh = os.listdir('/home/user/.ssh')
 
                     if not os.path.isdir('/home/user/.ssh'):
@@ -663,7 +665,7 @@ class NewFotoCheck:
                         print "scp: publickey found"
                         try:
                             scp = pexpect.spawn('scp %r %r' %(str(data), dest))
-                            #FotoShareN9 accept only a public key with the name "fotoshare"
+                            # FotoShareN9 accept only a public key with the name "fotoshare"
                             scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
                             scp.sendline(self.server_pass)
                             scp.wait()
@@ -700,19 +702,25 @@ class NewFotoCheck:
                 except:
                     pass
 
-        #set list back and save this, because now all pics uploaded
+        # set list back and save this, because now all pics uploaded
         self.offline_picture_list = []
         f = open('/home/user/.config/fotoshare_offline.sav', 'w')
         pickle.dump(self.offline_picture_list, f)
         f.close()
 
-        #stoping timer for delayed pic upload (offline)
+        # stoping timer for delayed pic upload (offline)
         self.offline_timer.stop()
         print "offline_timer is stoped"
         print self.offline_timer.isActive()
 
 
+# Notifications ------------------------------------------------------
+
     def show_notification(self, name='', connection='', error=''):
+        """
+        Shows different types of Notifications on the GUI
+        """
+
         if error == '':
             if self.notification_type == 'off':
                 pass
@@ -736,37 +744,8 @@ class NewFotoCheck:
             message.publish()
 
 
+# Daemon start -------------------------------------------------------
 if __name__ == '__main__':
     app = QtCore.QCoreApplication(sys.argv)
     start = NewFotoCheck()
     sys.exit(app.exec_())
-
-
-
-#Alternative way to run it as an daemon!
-
-#class MyDaemon(Daemon):
-#    def run(self):
-#        app = QtCore.QCoreApplication(sys.argv)
-#        start = NewFotoCheck()
-#        sys.exit(app.exec_())
-
-#if __name__ == "__main__":
-#    daemon = MyDaemon('/tmp/daemon-fotoshare.pid')
-#    if len(sys.argv) == 2:
-#        if 'start' == sys.argv[1]:
-#            daemon.start()
-#        elif 'stop' == sys.argv[1]:
-#            daemon.stop()
-#        elif 'restart' == sys.argv[1]:
-#            daemon.restart()
-#        else:
-#            print "Unknown command"
-#            sys.exit(2)
-#        sys.exit(0)
-#    else:
-#        print "usage: %s start|stop|restart" % sys.argv[0]
-#        sys.exit(2)
-
-
-

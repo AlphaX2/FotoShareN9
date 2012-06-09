@@ -22,7 +22,7 @@ from PySide import QtOpenGL
 class FotoShareN9(QtCore.QObject):
     def __init__(self):
         QtCore.QObject.__init__(self)
-        self.FOTOSHARE_VERSION = "0.9.5-3"
+        self.FOTOSHARE_VERSION = "0.9.6-1"
 
         #Oberfläche und Instanzierungen für QML2Py Funktionen
         self.view = QtDeclarative.QDeclarativeView()
@@ -84,46 +84,46 @@ class FotoShareN9(QtCore.QObject):
         self.ACCESS_TYPE = 'app_folder'
 
     #Connections from Controller() class for QML/Py communication
-        self.controller.settings_saver.connect(self.save_settings)
-        self.controller.settings_loader.connect(self.load_settings)
+        self.controller.signal_settings_saver.connect(self.save_settings)
+        self.controller.signal_settings_loader.connect(self.load_settings)
 
         #Connection for daemon start
-        self.controller.daemon.connect(self.start_stop_daemon)
+        self.controller.signal_daemon_on_off.connect(self.start_stop_daemon)
 
         #Connection for daemon on boot option
-        self.controller.startupDaemon.connect(
+        self.controller.signal_startupDaemon.connect(
                                         self.activate_startup_daemon)
 
         #Connection for resize switch/slider
-        self.controller.resize_photos.connect(self.save_resize_option)
+        self.controller.signal_resize_photos.connect(self.save_resize_option)
 
         #Connections for option ButtonRow elements
-        self.controller.notification_select.connect(self.save_notification_type)
-        self.controller.video_select.connect(self.select_video_upload)
-        self.controller.wifi3g_select.connect(self.select_wifi3g)
-        self.controller.upload_type_select.connect(self.select_upload_type)
-        self.controller.save_interval_time.connect(self.save_interval_times) #TIMES not TIME! ;)
+        self.controller.signal_notification_select.connect(self.save_notification_type)
+        self.controller.signal_video_select.connect(self.save_video_upload_option)
+        self.controller.signal_wifi3g_select.connect(self.save_wifi3g_option)
+        self.controller.signal_upload_type_select.connect(self.save_upload_type)
+        self.controller.signal_save_interval_time.connect(self.save_interval_times) #TIMES not TIME! ;)
 
         #Test connections and settings set in GUI
-        self.controller.contest.connect(self.test_connection)
+        self.controller.signal_contest.connect(self.test_connection)
 
         #Reset all settings
-        self.controller.settings_reset.connect(self.reset_settings)
+        self.controller.signal_settings_reset.connect(self.reset_settings)
 
         #Activate LOG File
-        self.controller.activate_log.connect(self.enable_log)
+        self.controller.signal_activate_log.connect(self.enable_log)
 
         #Dropbox authentification process stuff
-        self.controller.dropbox_authweb_signal.connect(
+        self.controller.signal_dropbox_authweb.connect(
                                        self.get_dropbox_auth_weblink)
 
-        self.controller.dropbox_authsave_signal.connect(
+        self.controller.signal_dropbox_authsave.connect(
                                        self.save_dropbox_auth_token)
 
-        self.controller.dropbox_unlink_signal.connect(
+        self.controller.signal_dropbox_unlink.connect(
                                        self.unlink_dropbox_connection)
 
-# loading and saving settings ----------------------------------------
+# Preload all relevant information -----------------------------------
 
     def preload_settings(self):
         """
@@ -191,6 +191,26 @@ class FotoShareN9(QtCore.QObject):
             self.notification_type = 'off'
             self.resize = 0
 
+
+    def getPID(self):
+        """
+        Parses the pid of the fotoshare_service daemon and set the
+        number to self.pid. Also updates switch in the GUI if it is
+        running on app start.
+        """
+
+        cmd = 'ps aux|grep python'
+        pid = os.popen(cmd)
+        data = pid.readlines()
+
+        for i in data:
+            if 'fotoshare_service' in i:
+                daemon_pid = re.findall(r'\b\d+\b', str(i))
+                self.pid = daemon_pid[0]
+                self.root.switchCHECKED('true')
+                print 'Daemons pid is: '+daemon_pid[0]
+
+# pre GUI startup checks like options/switches -----------------------
 
     def is_first_start(self):
         """
@@ -284,17 +304,6 @@ class FotoShareN9(QtCore.QObject):
             self.root.notificationTypeButtonENABLED()
 
 
-    def check_log_file(self):
-        """
-        Set log file text in menu depending on the fact it is on/off
-        """
-
-        if self.log == 'yes':
-            self.root.updateLogText('yes')
-        else:
-            self.root.updateLogText('no')
-
-
     def check_dropbox_link(self):
         """
         Check if Dropbox is linked or not and show it on UI button.
@@ -309,6 +318,18 @@ class FotoShareN9(QtCore.QObject):
             print
             self.root.update_dropbox_auth_button('Unlink Dropbox', '')
 
+
+    def check_log_file(self):
+        """
+        Set log file text in menu depending on the fact it is on/off
+        """
+
+        if self.log == 'yes':
+            self.root.updateLogText('yes')
+        else:
+            self.root.updateLogText('no')
+
+# all kinds off save and load functions ------------------------------
 
     def load_settings(self):
         """
@@ -393,17 +414,19 @@ class FotoShareN9(QtCore.QObject):
         f.close()
 
 
-    def save_interval_times(self, time):
+    def save_resize_option(self, percent):
         """
-        Saves the selected interval time
+        Saves the selected resize option
         """
 
         if os.path.isfile(self.config_path):
             f = open(self.config_path)
             l = pickle.load(f)
 
-            l['interval_time'] = int(time)
-            print "Interval upload time is now: "+str(time)+" Minutes."
+            l['resize'] = percent
+            self.resize = percent
+
+            print "Resize is now: "+str(self.resize)+" %"
 
             # save config
             f = open(self.config_path, 'w')
@@ -422,6 +445,78 @@ class FotoShareN9(QtCore.QObject):
 
             l['notification_type'] = str(typus)
             print "Notification type is now: "+str(typus)
+
+            # save config
+            f = open(self.config_path, 'w')
+            pickle.dump(l,f)
+            f.close()
+
+
+    def save_video_upload_option(self, typus):
+        """
+        Saves setting from GUI: 'No video upload' vs. 'Video upload'
+        """
+
+        if os.path.isfile(self.config_path):
+            f = open(self.config_path)
+            l = pickle.load(f)
+
+            l['video_upload'] = typus
+            print "Video upload is now: "+str(typus)
+
+            # save config
+            f = open(self.config_path, 'w')
+            pickle.dump(l,f)
+            f.close()
+
+
+    def save_wifi3g_option(self, radio):
+        """
+        Saves setting from GUI: 'Wifi only' vs. 'Wifi and 3G'
+        """
+
+        if os.path.isfile(self.config_path):
+            f = open(self.config_path)
+            l = pickle.load(f)
+
+            l['data_connection'] = radio
+            print "Upload is now: "+str(radio)
+
+            # save config
+            f = open(self.config_path, 'w')
+            pickle.dump(l,f)
+            f.close()
+
+
+    def save_upload_type(self, typus):
+        """
+        Saves setting from GUI: 'Instant sync' vs. 'Inverval sync'
+        """
+
+        if os.path.isfile(self.config_path):
+            f = open(self.config_path)
+            l = pickle.load(f)
+
+            l['upload_type'] = typus
+            print "Upload type is now: "+str(typus)
+
+            # save config
+            f = open(self.config_path, 'w')
+            pickle.dump(l,f)
+            f.close()
+
+
+    def save_interval_times(self, time):
+        """
+        Saves the selected interval time
+        """
+
+        if os.path.isfile(self.config_path):
+            f = open(self.config_path)
+            l = pickle.load(f)
+
+            l['interval_time'] = int(time)
+            print "Interval upload time is now: "+str(time)+" Minutes."
 
             # save config
             f = open(self.config_path, 'w')
@@ -476,99 +571,7 @@ class FotoShareN9(QtCore.QObject):
             print "No _offline.sav found - do nothing."
 
 
-    def save_resize_option(self, percent):
-        """
-        Saves the selected resize option
-        """
-
-        if os.path.isfile(self.config_path):
-            f = open(self.config_path)
-            l = pickle.load(f)
-
-            l['resize'] = percent
-            self.resize = percent
-
-            print "Resize is now: "+str(self.resize)+" %"
-
-            # save config
-            f = open(self.config_path, 'w')
-            pickle.dump(l,f)
-            f.close()
-
-
-    def select_video_upload(self, typus):
-        """
-        Saves setting from GUI: 'No video upload' vs. 'Video upload'
-        """
-
-        if os.path.isfile(self.config_path):
-            f = open(self.config_path)
-            l = pickle.load(f)
-
-            l['video_upload'] = typus
-            print "Video upload is now: "+str(typus)
-
-            # save config
-            f = open(self.config_path, 'w')
-            pickle.dump(l,f)
-            f.close()
-
-
-    def select_upload_type(self, typus):
-        """
-        Saves setting from GUI: 'Instant sync' vs. 'Inverval sync'
-        """
-
-        if os.path.isfile(self.config_path):
-            f = open(self.config_path)
-            l = pickle.load(f)
-
-            l['upload_type'] = typus
-            print "Upload type is now: "+str(typus)
-
-            # save config
-            f = open(self.config_path, 'w')
-            pickle.dump(l,f)
-            f.close()
-
-
-    def select_wifi3g(self, radio):
-        """
-        Saves setting from GUI: 'Wifi only' vs. 'Wifi and 3G'
-        """
-
-        if os.path.isfile(self.config_path):
-            f = open(self.config_path)
-            l = pickle.load(f)
-
-            l['data_connection'] = radio
-            print "Upload is now: "+str(radio)
-
-            # save config
-            f = open(self.config_path, 'w')
-            pickle.dump(l,f)
-            f.close()
-
-
 # main functions -----------------------------------------------------
-
-    def getPID(self):
-        """
-        Parses the pid of the fotoshare_service daemon and set the
-        number to self.pid. Also updates switch in the GUI if it is
-        running on app start.
-        """
-
-        cmd = 'ps aux|grep python'
-        pid = os.popen(cmd)
-        data = pid.readlines()
-
-        for i in data:
-            if 'fotoshare_service' in i:
-                daemon_pid = re.findall(r'\b\d+\b', str(i))
-                self.pid = daemon_pid[0]
-                self.root.switchCHECKED('true')
-                print 'Daemons pid is: '+daemon_pid[0]
 
 
     def get_hostkey(self, hostname):
@@ -891,31 +894,31 @@ class Controller(QtCore.QObject):
     """
 
     # Dropbox related signals
-    dropbox_authweb_signal = QtCore.Signal()
-    dropbox_authsave_signal = QtCore.Signal()
-    dropbox_unlink_signal = QtCore.Signal()
+    signal_dropbox_authweb = QtCore.Signal()
+    signal_dropbox_authsave = QtCore.Signal()
+    signal_dropbox_unlink = QtCore.Signal()
 
     # Save/load putted in settings from GUI
-    settings_saver = QtCore.Signal(str, str, str, str, str, str)
-    settings_loader = QtCore.Signal()
+    signal_settings_saver = QtCore.Signal(str, str, str, str, str, str)
+    signal_settings_loader = QtCore.Signal()
 
     # MainPage switches and buttons
-    daemon = QtCore.Signal()
-    startupDaemon = QtCore.Signal()
-    resize_photos = QtCore.Signal(int)
+    signal_daemon_on_off = QtCore.Signal()
+    signal_startupDaemon = QtCore.Signal()
+    signal_resize_photos = QtCore.Signal(int)
 
-    notification_select = QtCore.Signal(str)
-    video_select = QtCore.Signal(str)
-    wifi3g_select = QtCore.Signal(str)
-    upload_type_select = QtCore.Signal(str)
-    save_interval_time = QtCore.Signal(str)
+    signal_notification_select = QtCore.Signal(str)
+    signal_video_select = QtCore.Signal(str)
+    signal_wifi3g_select = QtCore.Signal(str)
+    signal_upload_type_select = QtCore.Signal(str)
+    signal_save_interval_time = QtCore.Signal(str)
 
     # Connection test from SettingsPage
-    contest = QtCore.Signal(str)
+    signal_contest = QtCore.Signal(str)
 
     # Menu Options
-    activate_log = QtCore.Signal()
-    settings_reset = QtCore.Signal()
+    signal_activate_log = QtCore.Signal()
+    signal_settings_reset = QtCore.Signal()
 
 
     def __init__(self):
@@ -926,73 +929,73 @@ class Controller(QtCore.QObject):
     @QtCore.Slot(str)
     def auth_dropbox_signal(self, status):
         if status == "web":
-            self.dropbox_authweb_signal.emit()
+            self.signal_dropbox_authweb.emit()
         if status == "save":
-            self.dropbox_authsave_signal.emit()
+            self.signal_dropbox_authsave.emit()
         if status == "unlink":
-            self.dropbox_unlink_signal.emit()
+            self.signal_dropbox_unlink.emit()
 
 
     # Save and load settings from SettingsPage GUI
     @QtCore.Slot(str, str, str, str, str, str)
     def save_settings_signal(self, server, path, user, passw, connect, port):
-        self.settings_saver.emit(server, path, user, passw, connect, port)
+        self.signal_settings_saver.emit(server, path, user, passw, connect, port)
 
     @QtCore.Slot()
     def load_settings_signal(self):
-        self.settings_loader.emit()
+        self.signal_settings_loader.emit()
 
 
     # MainPage switches
     @QtCore.Slot()
     def start_daemon_signal(self):
-        self.daemon.emit()
+        self.signal_daemon_on_off.emit()
 
     @QtCore.Slot()
     def activate_startup_daemon_signal(self):
-        self.startupDaemon.emit()
+        self.signal_startupDaemon.emit()
 
     @QtCore.Slot(int)
     def resize_photos_signal(self, percent):
-        self.resize_photos.emit(percent)
+        self.signal_resize_photos.emit(percent)
 
 
     # MainPage buttons
     @QtCore.Slot(str)
     def notification_select_signal(self, typus):
-        self.notification_select.emit(typus)
+        self.signal_notification_select.emit(typus)
 
     @QtCore.Slot(str)
     def video_select_signal(self, typus):
-        self.video_select.emit(typus)
+        self.signal_video_select.emit(typus)
 
     @QtCore.Slot(str)
     def wifi3g_select_signal(self, radio):
-        self.wifi3g_select.emit(radio)
+        self.signal_wifi3g_select.emit(radio)
 
     @QtCore.Slot(str)
     def upload_type_select_signal(self, typus):
-        self.upload_type_select.emit(typus)
+        self.signal_upload_type_select.emit(typus)
 
     @QtCore.Slot(str)
     def save_interval_time_signal(self, time):
-        self.save_interval_time.emit(time)
+        self.signal_save_interval_time.emit(time)
 
 
     # Connection Test from SettingsPage
     @QtCore.Slot(str)
     def test_connection_signal(self, con_type):
-        self.contest.emit(con_type)
+        self.signal_contest.emit(con_type)
 
 
     # Menu options
     @QtCore.Slot()
     def settings_reset_signal(self):
-        self.settings_reset.emit()
+        self.signal_settings_reset.emit()
 
     @QtCore.Slot()
     def enable_log_file_signal(self):
-        self.activate_log.emit()
+        self.signal_activate_log.emit()
 
 
 
