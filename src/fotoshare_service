@@ -292,6 +292,10 @@ class NewFotoCheck:
 
         print "Init upload and prepare data."
 
+        # load latest settings - maybe some options changed since start,
+        # or also between two pictures
+        self.load_settings()
+
         filename = os.path.split(data)
         filename = filename[-1]
         video_check = filename.split('.')
