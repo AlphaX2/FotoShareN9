@@ -136,7 +136,7 @@ PageStackWindow {
                   FotoShareN9 is open source software. The source code is/will be available at Github.com/AlphaX2/FotoshareN9<br><br>
                   <b>Author:</b> Gabriel Böhme<br>
                   <b>Licence:</b> GPL 3.0<br>
-                  <b>Version:</b> 0.9.0-0<br><br>
+                  <b>Version:</b> 0.9.7<br><br>
                   <b>Thanks:</b><br> merlin1991, cermit3273, opensmartpad.org for their help and ideas, also pexpect, Paramiko, Wazapp for sharing their code!"
         acceptButtonText: "Ok"
     }
@@ -185,6 +185,15 @@ PageStackWindow {
         }
     }
 
+    QueryDialog {
+        id: privacyDialog
+        titleText: "Privacy policy"
+
+        message: "FotoShareN9 will collect the login information you give in the settings and nothing more. Your login data is stored in a configuration file on your device and nowhere else. FotoShareN9 will only use it to establish connections to the available services and/or servers. The login data is not given to any third party and is not used for any other purpose than the functions of FotoShareN9.<br><br> If you have any questions, concerns, or comments about our privacy policy you may contact us via:<br>m.gabrielboehme@googlemail.com"
+
+        acceptButtonText: "Ok"
+    }
+
     ToolBarLayout {
         id: commonTools
         visible: true
@@ -219,6 +228,11 @@ PageStackWindow {
                 id: logMenuItem
                 text: qsTr("Enable logfile")
                 onClicked: controller.enable_log_file_signal()
+            }
+
+            MenuItem {
+                text: qsTr("Privacy policy")
+                onClicked: privacyDialog.open()
             }
 
             MenuItem {

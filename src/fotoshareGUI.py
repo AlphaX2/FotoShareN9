@@ -22,7 +22,7 @@ from PySide import QtOpenGL
 class FotoShareN9(QtCore.QObject):
     def __init__(self):
         QtCore.QObject.__init__(self)
-        self.FOTOSHARE_VERSION = "0.9.6-1"
+        self.FOTOSHARE_VERSION = "0.9.7"
 
         #Oberfläche und Instanzierungen für QML2Py Funktionen
         self.view = QtDeclarative.QDeclarativeView()

@@ -4,16 +4,16 @@
 import os
 import sys
 import ftplib
-import dbus
-from dbus.mainloop.glib import DBusGMainLoop
 import pickle
 import subprocess
 import urllib2
 import dropbox
 from time import ctime
+
 import PIL
 from PIL import Image
-
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
 import paramiko
 import pexpect
 import mnotification as notify
