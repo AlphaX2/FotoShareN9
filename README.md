@@ -19,34 +19,17 @@ This is the bunch of features:
 - logfile support
 - nice QML GUI
 
-Notes
-=====
-- If you want upload via SCP and a public key - the public key have to
-be named "fotoshare"!
-
 Build Information
 =================
+Just pull/clone newest version to your PC.
+Change directory via termial to FotoShareN9's "src" folder and type
+this in your terminal:
 
-Copy fotoshareGUI.py, fotoshare_service and /qml to fotoshare_deb/opt/FotoShareN9 folder
-than open a terminal
+sh ./build_script
 
-At the terminal:
-----------------
-- cd /your/path/FotoShareN9/src/
-
-- sudo chown -R root:root fotoshare_deb/opt/
-- sudo chown -R root:root fotoshare_deb/usr/
-- sudo chown -R root:root fotoshare_deb/etc/
-
-- sudo chmod a+x fotoshare_deb/opt/FotoShareN9/fotoshareGUI.py
-- sudo chmod a+x fotoshare_deb/opt/FotoShareN9/fotoshare_service
-
-- python digsigsums.py fotoshare_deb
-
-- dpkg-deb -b fotoshare_deb
-- ar q fotoshare_deb.deb _aegis
-
-Now you can rename your deb file.
+Enter your root password if asked. That will build a installable Debian
+file. Now you can rename your deb file if you want and install it on
+your N9 / N950.
 
 ------------------
 
