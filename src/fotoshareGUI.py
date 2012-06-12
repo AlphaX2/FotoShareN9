@@ -589,10 +589,15 @@ class FotoShareN9(QtCore.QObject):
             print '*** Unable to open host keys file'
             host_keys = {}
 
+        print host_keys
+
         if host_keys.has_key(hostname):
             hostkeytype = host_keys[hostname].keys()[0]
             self.hostkey = host_keys[hostname][hostkeytype]
             print 'Using host key of type %s' % hostkeytype
+
+        print hostkeytype
+        print self.hostkey
 
 
     def start_stop_daemon(self):
@@ -789,7 +794,7 @@ class FotoShareN9(QtCore.QObject):
 
         # Try to connect via sftp
         if con_type == 'sftp':
-            'Testing sftp connection...'
+            print 'Testing sftp connection...'
             self.get_hostkey(self.server_adress)
             try:
                 t = paramiko.Transport((self.server_adress, 
@@ -817,7 +822,10 @@ class FotoShareN9(QtCore.QObject):
 
             # Get files at .ssh for checking "fotoshare" named
             # publickey is in it.
-            files_at_ssh = os.listdir('/home/user/.ssh')
+            try:
+                files_at_ssh = os.listdir('/home/user/.ssh')
+            except:
+                files_at_ssh = []
 
             # check if there is .ssh - if not create known_hosts and
             # login via normal password.
@@ -837,7 +845,12 @@ class FotoShareN9(QtCore.QObject):
                     self.root.callConnectionDialog('fail')
 
             # Without "fotoshare" publickey use normal password login.
-            if self.hostkey and not 'fotoshare' in files_at_ssh:
+
+#TODO: old line for public key authentification
+            #if self.hostkey and not 'fotoshare' in files_at_ssh:
+
+
+            if self.hostkey:
                 print "scp: no publickey found"
                 try:
                     scp = pexpect.spawn('scp %r %r' %(test, dest))
@@ -849,19 +862,21 @@ class FotoShareN9(QtCore.QObject):
                     print "SCP: except @ known_hosts only"
                     self.root.callConnectionDialog('fail')
 
+#TODO: ublic key is commented out for first release and will be back later!
+
             # Use publickey for upload (password means passphrase)
-            if self.hostkey and 'fotoshare' in files_at_ssh:
-                print "scp: publickey found"
-                try:
-                    scp = pexpect.spawn('scp %r %r' %(test, dest))
-                    # FotoShareN9 accept only a public key with the name "fotoshare"
-                    scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
-                    scp.sendline(self.server_pass)
-                    scp.wait()
-                    self.root.callConnectionDialog('ok')
-                except:
-                    print "SCP: except @ public key auth"
-                    self.root.callConnectionDialog('fail')
+#            if self.hostkey and 'fotoshare' in files_at_ssh:
+#                print "scp: publickey found"
+#                try:
+#                    scp = pexpect.spawn('scp %r %r' %(test, dest))
+#                    # FotoShareN9 accept only a public key with the name "fotoshare"
+#                    scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
+#                    scp.sendline(self.server_pass)
+#                    scp.wait()
+#                    self.root.callConnectionDialog('ok')
+#                except:
+#                    print "SCP: except @ public key auth"
+#                    self.root.callConnectionDialog('fail')
 
 
         # Try to connect via Dropbox

@@ -7,13 +7,13 @@ import ftplib
 import pickle
 import subprocess
 import urllib2
-import dropbox
 from time import ctime
 
-import PIL
-from PIL import Image
+import dropbox
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
+import PIL
+from PIL import Image
 import paramiko
 import pexpect
 import mnotification as notify
@@ -156,11 +156,11 @@ class NewFotoCheck:
         self.video_allowed = l['video_upload']
 
         print "hostkey (setting)"
-        self.hostkey = False
+        self.hostkey = None
         print self.hostkey
 
         print "hostkeytype (setting)"
-        self.hostkeytype = False
+        self.hostkeytype = None
         print self.hostkeytype
 
         # Dropbox API stuff
@@ -174,11 +174,8 @@ class NewFotoCheck:
 
     def get_hostkey(self, hostname):
         """
-        Reads server hostkeys from ~/.ssh/known_hosts and sets self.hostkey.
+        Reads server hostkeys from ~/.ssh/known_hosts and sets self.hostkey
         """
-
-        print "in get_hostkey()"
-        print hostname
 
         hostkeytype = None
         hostkey = None
@@ -190,15 +187,15 @@ class NewFotoCheck:
             print '*** Unable to open host keys file'
             host_keys = {}
 
+        print host_keys
+
         if host_keys.has_key(hostname):
             hostkeytype = host_keys[hostname].keys()[0]
             self.hostkey = host_keys[hostname][hostkeytype]
             print 'Using host key of type %s' % hostkeytype
-            self.hostkeytype = hostkeytype
 
-        else:
-            self.hostkey = False
-            self.hostkeytype = False
+        print hostkeytype
+        print self.hostkey
 
 
     def check_is_wlan(self):
@@ -249,16 +246,26 @@ class NewFotoCheck:
         Connects to the FTP Server via sFTP from paramiko module
         """
 
+        print "connect sftp runs"
+
         self.get_hostkey(self.server_adress)
+
         self.sftp_transport = paramiko.Transport((self.server_adress,
                                               int(self.server_port)))
+
+        print "sftp_transport steht"
 
         self.sftp_transport.connect(username=self.server_user,
                                     password=self.server_pass,
                                     hostkey=self.hostkey)
 
+        print "sftp_transport.connect steht"
+
         self.sftp = paramiko.SFTPClient.from_transport(self.sftp_transport)
+        print "sftp Client steht"
+
         self.sftp.chdir(self.server_folder)
+        print "Verzeichnis gewechselt"
 
 
     def init_upload_steps(self, arg1, data):
@@ -424,7 +431,9 @@ class NewFotoCheck:
         if self.connection == 'sftp':
             try:
                 self.connect_sftp()
+                print "1"
                 self.sftp.put(data, name)
+                print "2"
                 self.sftp_transport.close()
                 print "sftp upload finished."
 
@@ -449,7 +458,10 @@ class NewFotoCheck:
                 self.get_hostkey(self.server_adress)
 
                 # get files at .ssh - "fotoshare" would be the public key
-                files_at_ssh = os.listdir('/home/user/.ssh')
+                try:
+                    files_at_ssh = os.listdir('/home/user/.ssh')
+                except:
+                    files_at_ssh = []
 
                 if not os.path.isdir('/home/user/.ssh'):
                     print "scp: no ~/.shh found"
@@ -469,7 +481,7 @@ class NewFotoCheck:
                         self.offline_except_handler(str(data))
                         print self.offline_picture_list
 
-                if self.hostkey and not 'fotoshare' in files_at_ssh:
+                if self.hostkey:
                     print "scp: no publickey found"
                     try:
                         scp = pexpect.spawn('scp %r %r' %(str(data), dest))
@@ -485,22 +497,24 @@ class NewFotoCheck:
                         self.offline_except_handler(str(data))
                         print self.offline_picture_list
 
-                if self.hostkey and 'fotoshare' in files_at_ssh:
-                    print "scp: publickey found"
-                    try:
-                        scp = pexpect.spawn('scp %r %r' %(str(data), dest))
-                        # FotoShareN9 accept only a public key with the name "fotoshare"
-                        scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
-                        scp.sendline(self.server_pass)
-                        scp.wait()
+# public key is commented out due to bugs -> will be re enabled in later version
 
-                        self.show_notification(name, 'scp')
-                        if self.log == 'yes':
-                            self.write_log_data(name, 'success', 'scp')
-                    except:
-                        print "SCP: except @ public key auth"
-                        self.offline_except_handler(str(data))
-                        print self.offline_picture_list
+#                if self.hostkey and 'fotoshare' in files_at_ssh:
+#                    print "scp: publickey found"
+#                    try:
+#                        scp = pexpect.spawn('scp %r %r' %(str(data), dest))
+#                        # FotoShareN9 accept only a public key with the name "fotoshare"
+#                        scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
+#                        scp.sendline(self.server_pass)
+#                        scp.wait()
+
+#                        self.show_notification(name, 'scp')
+#                        if self.log == 'yes':
+#                            self.write_log_data(name, 'success', 'scp')
+#                    except:
+#                        print "SCP: except @ public key auth"
+#                        self.offline_except_handler(str(data))
+#                        print self.offline_picture_list
 
             except:
                 if self.log == 'yes':
@@ -647,7 +661,7 @@ class NewFotoCheck:
                         except:
                             print "SCP: except @ no .ssh dir"
 
-                    if self.hostkey and not 'fotoshare' in files_at_ssh:
+                    if self.hostkey:
                         print "scp: no publickey found"
                         try:
                             scp = pexpect.spawn('scp %r %r' %(str(data), dest))
@@ -661,20 +675,22 @@ class NewFotoCheck:
                         except:
                             print "SCP: except @ known_hosts only"
 
-                    if self.hostkey and 'fotoshare' in files_at_ssh:
-                        print "scp: publickey found"
-                        try:
-                            scp = pexpect.spawn('scp %r %r' %(str(data), dest))
-                            # FotoShareN9 accept only a public key with the name "fotoshare"
-                            scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
-                            scp.sendline(self.server_pass)
-                            scp.wait()
+# commented out due to a bug, re enabled in later version
 
-                            self.show_notification(name, 'scp')
-                            if self.log == 'yes':
-                                self.write_log_data(name, 'success', 'scp')
-                        except:
-                            print "SCP: except @ public key auth"
+#                    if self.hostkey and 'fotoshare' in files_at_ssh:
+#                        print "scp: publickey found"
+#                        try:
+#                            scp = pexpect.spawn('scp %r %r' %(str(data), dest))
+#                            # FotoShareN9 accept only a public key with the name "fotoshare"
+#                            scp.expect("Enter passphrase for key '/home/user/.ssh/fotoshare: ")
+#                            scp.sendline(self.server_pass)
+#                            scp.wait()
+
+#                            self.show_notification(name, 'scp')
+#                            if self.log == 'yes':
+#                                self.write_log_data(name, 'success', 'scp')
+#                        except:
+#                            print "SCP: except @ public key auth"
 
                 except:
                     pass
