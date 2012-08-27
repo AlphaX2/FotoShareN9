@@ -21,15 +21,7 @@ This is the bunch of features:
 
 Build Information
 =================
-Just pull/clone newest version to your PC.
-Change directory via termial to FotoShareN9's "src" folder and type
-this in your terminal:
-
-sh ./build_script
-
-Enter your root password if asked. That will build a installable Debian
-file. Now you can rename your deb file if you want and install it on
-your N9 / N950.
+Will be updated with 1.6.1 code upload.
 
 ------------------
 
