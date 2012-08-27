@@ -25,7 +25,7 @@ Will be updated with 1.6.1 code upload.
 
 ------------------
 
-Last update: 08.06.2012
+Last update: 28.08.2012
 
 
 
