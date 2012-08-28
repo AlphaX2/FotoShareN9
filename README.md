@@ -1,3 +1,8 @@
+ATTENTION!
+==========
+The latest version 1.6.1 is not uploaded at the moment. Here you'll get the older version 0.9.7!
+The new code will be online in a few days, or you contact me! 
+
 FotoShareN9
 ===========
 
@@ -22,6 +27,10 @@ This is the bunch of features:
 Build Information
 =================
 Will be updated with 1.6.1 code upload.
+
+Licence
+=======
+FotoShareN9 is published under the terms and conditions of the GPL licence version 3.
 
 ------------------
 
