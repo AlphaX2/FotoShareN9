@@ -1,0 +1,13 @@
+<aegis>
+    <request>
+        <credential name="GRP::upstart" />
+        <credential name="UID::user" />
+        <credential name="GID::users" />
+        <for path="/opt/FotoShareN9/fotoshare_service" />
+    </request>
+    <request context="INSTALL">
+        <credential name="UID::user"/>
+        <credential name="GRP::users"/>
+    </request>
+</aegis>
+

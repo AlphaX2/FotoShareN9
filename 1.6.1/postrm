@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# all config stuff
+rm -rf /home/user/.config/FotoShareN9
+
+# "trash" like *.pyc files
+rm -rf /opt/FotoShareN9

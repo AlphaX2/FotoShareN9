@@ -1,0 +1,136 @@
+
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+
+import os
+import pickle
+
+import dropbox
+import oauth
+import simplejson
+
+from PySide import QtCore
+
+class DropboxPluginSettings(QtCore.QObject):
+    def __init__(self):
+        QtCore.QObject.__init__(self)
+
+        # fill in your application account secrets
+        self.APP_KEY = ''
+        self.APP_SECRET = ''
+        self.ACCESS_TYPE = 'app_folder'
+        self.config_path = '/home/user/.config/FotoShareN9/fotoshare_dropbox_plugin.cfg'
+        self.qml_button_text = self.set_button_text()
+
+        print self.qml_button_text
+
+    # No file or empty token - need to link, otherwise - show "unlink"
+    def set_button_text(self):
+        if os.path.isfile(self.config_path):
+            with open(self.config_path) as f:
+                l = pickle.load(f)
+
+                if l['db_access_token'] == '' or l['db_access_secret'] == '':
+                    return 'Link Dropbox'
+                else:
+                    return 'Unlink Dropbox'
+        else:
+            return 'Link Dropbox'
+
+    def get_button_text(self):
+        return self.qml_button_text
+
+
+    button_text = QtCore.Property(unicode, get_button_text)
+
+
+#    Here you find three different functions:
+#    1. generate a Dropbox authentication link
+#    2. save tokens you got from Dropbox
+#    3. Unlink Dropbox => delete tokens and clear Dropbox settings
+
+#    It's handled by the Dropbox authentication button in QML so have
+#    also a look there!
+
+    @QtCore.Slot()
+    def get_dropbox_auth_weblink(self):
+        """
+        Generates an authentication weblink for Dropbox and shows a
+        link on the GUI.
+        """
+
+        print "Dropbox auth"
+        self.drop_session = dropbox.session.DropboxSession(
+                                                     self.APP_KEY,
+                                                     self.APP_SECRET,
+                                                     self.ACCESS_TYPE)
+
+        self.request_token = self.drop_session.obtain_request_token()
+        url = self.drop_session.build_authorize_url(self.request_token)
+
+        # URL will open in default Harmattan browser
+        os.popen("/usr/bin/grob '{0}'".format(url))
+
+
+    @QtCore.Slot()
+    def save_dropbox_auth_token(self):
+        """
+        Generates an access token from request token and saves them.
+        """
+
+        print "Dropbox save"
+        print self.drop_session
+        # This will fail if the user didn't visit the Auth-URL and hit 'Allow'
+        self.access_token = self.drop_session.obtain_access_token(
+                                                   self.request_token)
+
+        self.save_dropbox_settings(
+                                    self.access_token.key,
+                                    self.access_token.secret)
+
+
+    @QtCore.Slot()
+    def unlink_dropbox_connection(self):
+        """
+        Destroys the link to Dropbox and reset settings.
+        """
+
+        print "Dropbox unlink"
+        # If user want to destroy the connection from app to dropbox
+        self.drop_session = None
+        self.save_dropbox_settings('', '')
+
+        print "Delete plugin config file"
+        os.remove('/home/user/.config/FotoShareN9/fotoshare_dropbox_plugin.cfg')
+
+
+    @QtCore.Slot()
+    def save_dropbox_settings(self, access_token, access_secret):
+        """
+        Saves Dropbox access token informations from authentification.
+
+        If there is no settings file a new one will be created and
+        filled up with default settings.
+        """
+
+        # load config file or create a new one
+        if os.path.isfile(self.config_path):
+            with open(self.config_path) as f:
+                l = pickle.load(f)
+        else:
+            with open(self.config_path, 'w') as f:
+                pickle.dump(
+                            {
+                             'db_access_token': '',
+                             'db_access_secret': '',
+                             }, f)
+
+            with open(self.config_path) as f:
+                l = pickle.load(f)
+
+        l['db_access_token'] = str(access_token)
+        l['db_access_secret'] = str(access_secret)
+
+        # save config
+        with open(self.config_path, 'w') as f:
+            pickle.dump(l,f)

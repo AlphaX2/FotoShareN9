@@ -1,0 +1,5 @@
+#!/bin/sh 
+
+# remove settings from 0.9.7
+rm /home/user/.config/fotoshare.cfg
+rm /home/user/.config/fotoshare_offline.sav

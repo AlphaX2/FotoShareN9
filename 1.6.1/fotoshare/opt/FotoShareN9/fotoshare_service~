@@ -1,0 +1,723 @@
+#!/usr/bin/env python
+#-*- coding: utf-8 -*-
+
+import os
+import sys
+
+sys.path.append('/opt/FotoShareN9/libs')
+import fotoshare
+from fotoshare import mnotification as notify
+
+import ftplib
+import pickle
+import subprocess
+import urllib2
+from time import ctime
+
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
+import PIL
+from PIL import Image
+
+
+from QtMobility.SystemInfo import QSystemNetworkInfo
+from PySide import QtCore
+from PySide.QtCore import QTimer
+from PySide.QtNetwork import QNetworkConfigurationManager, QNetworkConfiguration
+
+
+__fotoshare_version__ = '0.9.7'
+__config_path__ = '/home/user/.config/FotoShareN9/fotoshare.cfg'
+__offline_sav_path__ = '/home/user/.config/FotoShareN9/offline_list.sav'
+__plugin_path__ = '/opt/FotoShareN9/plugins/'
+
+
+# config -------------------------------------------------------------
+class Config:
+    def __init__(self):
+        print "Init: call load_settings() to load them!"
+        self.interval_waiting_list = None   # holds pictures for interval upload
+        self.offline_picture_list = None    # holds pictures if device is offline
+        self.connection_types = None        # list with active Plugins (FTP, Dropbox ...)
+        self.connection_radio = None        # Wlan (Wifi only) and 3G (both)
+        self.upload_type = None             # instant/interval
+        self.daemon_startup = None          # start daemon on boot (yes/no)
+        self.video_upload = None            # allowed/forbidden
+        self.interval_time = None           # time like on UI (5,10,15,...)
+        self.version = None                 # version number of FotoShareN9
+        self.log = None                     # write log yes/no
+        self.resize_option = None           # resize pics yes/no
+        self.resize_scale = None            # resize in percent
+        self.notification_type = None       # off, banner, EventFeed
+
+    def load_settings(self):
+        """
+        Loads all relevant data for the daemon from fotoshare.cfg
+        """
+
+        with open(__config_path__) as f:
+            l = pickle.load(f)
+
+        print
+        print "These are the settings"
+        print
+        print l
+        print
+
+        # holds picture names, that are not uploaded yet 
+        # (interval upload selected)
+        self.interval_waiting_list = []
+
+        # holds pictures names, that are not uploaded yet
+        # (offline when shot)
+        self.offline_picture_list = []
+
+        # normal settings
+        self.connection_types = l['connection_types']
+        self.connection_radio = l['connection_radio']
+        self.upload_type = l['upload_type']
+        self.daemon_startup = l['daemon_startup']
+        self.video_upload = l['video_upload']
+        self.interval_time = l['interval_time']
+        self.version = l['version']
+        self.log = l['log']
+        self.resize_option = l['resize_option']
+        self.resize_scale = l['resize_scale']
+        self.notification_type = l['notification_type']
+
+        print "Settings loaded successful!"
+
+
+
+# daemon startup and dbus binding ------------------------------------
+class FotoShareDaemon:
+    def __init__(self):
+        print
+        print "-== FOTOSHARE N9 DAEMON ==-"
+        print
+
+        #(re)load settings to have latest
+        config.load_settings()
+
+        # instance of UploadManager for DBUS binding
+        self.upload = UploadManager()
+
+        # Checks if daemon is allowed to start
+        self.start_checks()
+
+        # DBUS Init
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        self.bus = dbus.SessionBus()
+
+        try:
+            # Get the remote object
+            self.remote_object = self.bus.get_object(
+                                    'com.nokia.maemo.CameraService', 
+                                    '/',
+                                    follow_name_owner_changes=True)
+
+            # Get the remote interface for the remote object
+            self.iface = dbus.Interface(self.remote_object,
+                         'com.nokia.maemo.meegotouch.CameraInterface')
+
+        except dbus.DBusException:
+            print_exc()
+            sys.exit(1)
+
+        self.iface.connect_to_signal('captureCompleted',
+                                             self.upload.buffer_photos)
+
+
+    def start_checks(self):
+        plugin_list = os.listdir('/home/user/.config/FotoShareN9')
+
+        # Stop daemon if there is no settings file
+        if os.path.isfile(__config_path__):
+            print "Found config file."
+            pass
+        else:
+            print "No config file: Daemon stops."
+            sys.exit(0)
+
+        # Without connection details: stop daemon!
+        is_cfg = False
+
+        #no plugin.cfg means no settings means everything is greyed out
+        for i in plugin_list:
+            if '_plugin.cfg' in i:
+                is_cfg = True
+
+        if not is_cfg:
+            print "No connection details found - stopping!"
+            sys.exit(0)
+
+        # If true user starts daemon from UIs switch - allowed! ;)
+        print "Check Daemon startup type:"
+        if self.check_startup_from_UI():
+            print "Daemon started from UI."
+        # If not and if not allowed to boot on start - stop it!
+        else:
+            print "Daemon starts on boot/via terminal!"
+            if config.daemon_startup == '':
+                print 'Daemon not allowed to start: stop!'
+                sys.exit(0)
+
+        # Try to upload if N9 was offline and a picture could not
+        # uploaded and N9/Daemon switched off and the pics waiting
+        if os.path.isfile(__offline_sav_path__):
+            print "Maybe some pics not uploaded so far - checking it!"
+            self.upload.try_offline_pic_upload()
+
+
+    def check_startup_from_UI(self):
+        """
+        Checks for daemon is started from autostart or GUI.
+        If daemon starts via boot, it will be checked if he is allowed
+        to start on boot (self.daemon_status) if not daemon stops 
+        itself. If daemon starts from UI (means UI is running) it will
+        not stop, because in this case, it has to run!
+        """
+
+        cmd = 'ps aux| grep python'
+        pid = os.popen(cmd)
+        data = pid.readlines()
+
+        for i in data:
+            print i
+            print type(i)
+
+            if 'fotoshareGUI' in str(i):
+                print "Found running GUI"
+                return True
+                break
+
+
+
+# foto/video object class --------------------------------------------
+class FotoShareObject:
+    def __init__(self, data):
+        filename = os.path.split(data)
+        filename = filename[-1]
+        self.video_check = filename.split('.')
+
+        #(re)load settings to have latest
+        config.load_settings()
+
+        self.path = data
+        self.is_resize = self.check_resize_option()
+        self.is_video = self.check_video_option()
+        self.resize_percentage = self.check_resize_percentage()
+        self.is_wlan_only = self.check_wlan_option()
+        self.is_interval = self.check_interval_option()
+
+
+    def check_video_option(self):
+        # Is the file a picture OR (a video, while is video allowed)
+        return self.video_check[1] == 'jpg' or (self.video_check[1] == 'mp4' and config.video_upload == 'allowed')
+
+    def check_resize_option(self):
+        return config.resize_option == 'yes'
+
+    def check_resize_percentage(self):
+        return config.resize_scale
+
+    def check_interval_option(self):
+        return config.upload_type == 'interval'
+
+    def check_wlan_option(self):
+        return config.connection_radio == 'Wlan'
+
+
+
+# manage all kinds of upload related stuff ---------------------------
+class UploadManager:
+    def __init__(self):
+        print "Starting Upload Manager"
+
+        #reload settings to have latest
+        config.load_settings()
+
+        # catches paths for some time to prevent "traffic hold up"
+        self.buffer_timer = QTimer()
+        self.buffer_list = []
+
+        # Timer loads up pics later if user selected interval upload
+        self.interval_timer = QTimer()
+        self.interval_waiting_list = []
+
+        # Timer loads up pics later if N9 is offline when they are shot
+        self.offline_timer = QTimer()
+
+        #self.offline_timer.setSingleShot(True)
+        self.offline_timer.timeout.connect(self.try_offline_pic_upload)
+        self.offline_picture_list = []
+
+        self.filename = None
+        self.data = None
+
+
+    def buffer_photos(self, arg1, path):
+        """
+        It's a buffer to prevent errors/not uploaded pictures in case
+        of many pics shot at once. "arg1" is a useless argument from
+        DBUS, but is sent everytime with signal, so capture it here for no use.
+        "path" holds the path, of the picture which will be
+        uploaded.
+        """
+
+        print "photo_buffer()"
+
+        if self.buffer_timer.isActive():
+            print "Timer is running, we are doing nothing!"
+            pass
+        else:
+            self.buffer_timer.timeout.connect(self.handle_buffer_timeout)
+
+            # GSM buffer is 1 min. to give the slow connection enough
+            # time for uploading!
+            if self.check_connection('Wlan') or self.check_connection('Wcdma'):
+                print "Buffer set to 30 sec"
+                self.buffer_timer.start(30000)
+            elif self.check_connection('Gsm'):
+                print "Buffer set to 60 sec"
+                self.buffer_timer.start(60000)
+
+        self.buffer_list.append(path)
+        print self.buffer_list
+
+
+    def handle_buffer_timeout(self):
+        """
+        Is called in the moment the buffer timed out
+        Sending a list with the paths of all pictures which landed
+        in the buffer in the last 10 sec. Buffer is cleared and QTimer
+        stoped.
+        """
+        print "photo_timeout()"
+        self.buffer_timer.stop()
+        photo_upload_list = self.buffer_list
+        self.buffer_list = []
+        self.prepare_upload(photo_upload_list)
+
+# main uploading logic/methods ---------------------------------------
+
+    def prepare_upload(self, photo_list):
+        """
+        Init the upload process and starts relevant upload functions
+
+        How it works:
+        first of all it's getting a list of pictures, it's iterating
+        this list. "data" is the name and path of the picture and will
+        be used in all further steps.
+
+        Maybe the user want a resized picture - so do that, save it 
+        and make the path to the smaller sized version the new "data"
+        string, which holds the whole path to the file and is used in 
+        all further steps.
+
+        Next step is to checks if the user selected interval upload,
+        if yes, it collects the pic names/paths in a waiting list and
+        starts the QTimer instance. On timeout it starts a function,
+        which will run a for-loop to upload all pics that are waiting.
+        If no interval upload is selected, it just start normal upload
+        process.
+        """
+
+        print "Prepare data and init upload."
+
+        # main logic - that's the magic! :)
+        for data in photo_list:
+            self.data = data
+            self.upload_object = FotoShareObject(self.data)
+
+            if self.upload_object.is_resize:
+                self.resize_photo()
+            if self.upload_object.is_video:
+                if self.upload_object.is_interval:
+                    self.set_interval()
+                else:
+                    self.start_upload(self.data)
+            else:
+                print "Video Upload is forbidden!"
+
+
+    def resize_photo(self):
+        print "Resize is wanted!"
+
+        small_pic_path="/home/user/MyDocs/DCIM/FotoShareN9_small/"
+
+        if not os.path.isdir(small_pic_path):
+            os.makedirs(small_pic_path)
+
+        data_old = self.data
+        self.data = small_pic_path+self.filename
+        print self.data
+
+        #create a useable value from percent
+        percent = self.upload_object.resize_percentage
+        percent = percent * 0.01
+        print str(percent)+" %"
+
+        # open original picture from DBUS signal string
+        img = Image.open(data_old)
+        # claculate new height and width
+        new_width = float((img.size[0])) * percent
+        new_height = float((img.size[1])) * percent
+
+        print "New picture width: "+str(new_width)
+        print "New picture height: "+str(new_height)
+
+        # resize the picture
+        img = img.resize((int(new_width), int(new_height)), PIL.Image.ANTIALIAS)
+        print "Resizing image..."
+
+        # save smaller version of the picture
+        img.save(small_pic_path+self.filename)
+        print "Saved resized image! - Success!"
+
+    def set_interval(self):
+        self.interval_waiting_list.append(self.data)
+        print "The waiting list:"
+        print self.interval_waiting_list
+
+        if self.interval_timer.isActive():
+            print "interval_timer is running, so we do nothing"
+        else:
+            print "setting interval_timer to:"+str(config.interval_time)
+            self.interval_timer.timeout.connect(self.start_interval_upload)
+            self.interval_timer.start(config.interval_time*60000) # convert ms to sec
+
+
+    def check_connection(self, connect_name):
+        """
+        Checks that Wifi/WLAN connection is active or not, function is called
+        by start_upload().
+        """
+        networkInfo = QSystemNetworkInfo()
+        mode = getattr(QSystemNetworkInfo, connect_name+'Mode')
+        status = networkInfo.networkStatus(mode)
+        status = str(status)
+        status = status.split('.')
+        return status[-1] != 'NoNetworkAvailable'
+
+
+    def check_online_status(self):
+        mgr = QNetworkConfigurationManager()
+        activeConfigs = mgr.allConfigurations(QNetworkConfiguration.Active)
+        return mgr.isOnline()
+
+
+    def start_interval_upload(self):
+        """
+        Uploads all pictures in the waiting list via a for-iteration.
+        """
+
+        # To be sure the timer is stoped, it's done here.
+        if self.interval_timer.isActive():
+            print "Stopping timer"
+            self.interval_timer.stop()
+
+        galerie_list = os.listdir("/home/user/MyDocs/DCIM")
+        waiting_pics_tmp = []
+
+        # create a temp list with pathless data names
+        for pics in self.interval_waiting_list:
+            var = os.path.split(pics)
+            var = var[-1]
+            waiting_pics_tmp.append(var)
+
+        print waiting_pics_tmp
+
+        # checks that pics from (temporary) waiting list still in
+        # gallery, if not - no upload will happen.
+        for pic in waiting_pics_tmp:
+            if not pic in galerie_list:
+                print "Entferne: /home/user/MyDocs/DCIM/"+pic
+                self.interval_waiting_list.remove("/home/user/MyDocs/DCIM/"+pic)
+
+        print "Uploading pics in interval_waiting_list"
+        for data in self.interval_waiting_list:
+            self.start_upload(data)
+
+
+    def start_upload(self, data):
+        """
+        Start normal upload function. Check for WLAN only upload before.
+        """
+
+        # check if the user want wifi only upload
+        if config.connection_radio == 'Wlan':
+            if self.check_connection("Wlan"):
+                print "FotoShareN9 is uploading via Wifi!"
+                self.upload_picture(data)
+            else:
+                print "No Wifi - uploading later!"
+                self.offline_except_handler(str(data))
+        else:
+            print "FotoShareN9 is uploading with 3G or Wifi!"
+            self.upload_picture(data)
+
+
+    def upload_picture(self, data):
+        """
+        Uploads pictures to ftp/sftp/scp server or your Dropbox.
+        """
+
+        msg = NotificationHandler()
+
+        # self.filename is only in one case None: Daemon starts while
+        # a picture is waiting in offline_sav and the device is Online
+        # so it's needed to set it here, to show the correct name!
+        filename = os.path.split(data)
+        self.filename = filename[-1]
+
+        if os.path.isfile(__config_path__):
+            with open(__config_path__) as f:
+                l = pickle.load(f)
+
+            connections_list = l['connection_types']
+            print connections_list
+
+        for con in connections_list:
+            try:
+                con = con.lower()
+                lib_path = __plugin_path__+con+'/libs'
+                sys.path.append(lib_path)
+
+                plugin_upload_import_cmd = 'import '+con+'_upload_plugin'
+                exec plugin_upload_import_cmd
+                print "Import of "+con+"_upload_plugin was successful"
+                self.write_log_data('importing of '+con+'_upload_plugin.py was successful')
+            except:
+                msg.show_error_notification('while loading the selected plugin')
+                self.write_log_data('An error occured while loading'+con+'_upload_plugin.py')
+
+            print "in upload_pictures data is:"
+            print data
+
+            # This "heavy" string is used to execute a very optional
+            # command, that is puzzled together with the (variable),
+            # because dynamicly loaded plugin.
+            upload_cmd = """
+try:
+    if {0}_upload_plugin.{1}UploadPlugin().upload('{2}'):
+        msg.show_notification('{3} was uploaded with {4}')
+        self.write_log_data('uploaded {5} with {6}_upload_plugin.py')
+
+    else:
+        msg.show_banner_notification('You are offline, FotoShareN9 will try to upload in 20 min.')
+        self.write_log_data('Device was offline, offline handler was called!')
+        self.offline_except_handler('{7}')
+
+except:
+    msg.show_error_notification('{8}'+': problem while uploading {9}!')
+    self.write_log_data('An error occured while uploading {10} with {11}_upload_plugin.py')
+""".format( con,            #0
+            con.title(),    #1
+            data,           #2
+            self.filename,  #3
+            con.title(),    #4
+            data,           #5
+            con,            #6
+            data,           #7
+            con.title(),    #8
+            self.filename,  #9
+            data,           #10
+            con)            #11
+
+            #execute the damn long string here!
+            exec upload_cmd
+
+
+    def write_log_data(self, information):
+        """
+        Writes given informations in the log file at MyDocs.
+        """
+
+        if config.log == 'yes':
+            string = str(ctime())+': '+information+'\n'
+            with open('/home/user/MyDocs/fotoshare.log', 'a') as log:
+                log.write(string)
+
+
+# Offline exception handling -----------------------------------------
+
+    def offline_except_handler(self, data):
+        """
+        Safes the names of pictures, which were not uploaded yet.
+        """
+
+        print str(ctime())+": Offline handler is called"
+        self.offline_picture_list.append(data)
+        print self.offline_picture_list
+
+        if os.path.isfile(__offline_sav_path__):
+            with open(__offline_sav_path__, 'r') as f:
+                # If some pictures still in offline sav file list, add
+                # them to the new one in offline_picture_list and save
+                # the new (complete) list with pickle!
+                l = pickle.load(f)
+
+                if len(l):
+                    if not self.offline_picture_list[0] in l:
+                        self.offline_picture_list = self.offline_picture_list+l
+
+        with open(__offline_sav_path__, 'w') as f:
+            pickle.dump(self.offline_picture_list, f)
+
+        if self.offline_timer.isActive():
+            print "offline_timer is running, only append is done."
+        else:
+            print "offline_timer is set to 20 min."
+            # 1.2 mio. sec = 20 mins. (time is hard coded)
+            self.offline_timer.start(1200000)
+
+
+    def try_offline_pic_upload(self):
+        """
+        Try to load up pictures that could not be uploaded before, due
+        to N9 was offline or maybe an upload error happend.
+        It's nearly the same, like normal picture upload but without
+        the except handler stuff.
+        """
+
+        if os.path.isfile(__offline_sav_path__):
+            with open(__offline_sav_path__) as f:
+                l = pickle.load(f)
+
+            if not len(l):
+                print "No pictures to upload!"
+            else:
+                print "Upload pictures from last time/offline."
+
+                # Check that online status is now positive
+                if self.check_online_status():
+                    print "Onlinestatus: ONLINE!"
+
+                    # if wifi only option is set, check that wifi is running
+                    if config.connection_radio == 'Wlan':
+                        print "WIFI only upload mode!"
+
+                        if self.check_connection('Wlan'):
+                            print "WIFI is online!"
+
+                            for data in l:
+                                print "Uploading now: "+str(data)
+                                self.upload_offline_pictures(str(data))
+                            self.offline_timer.stop()
+
+                    else:
+                        print "3G and WIFI upload!"
+                        for data in l:
+                            print "Uploading now: "+str(data)
+                            self.upload_offline_pictures(str(data))
+                        self.offline_timer.stop()
+
+                else:
+                    print "Onlinestatus: OFFLINE!"
+
+                    # for example timer is not running when daemon
+                    # checks on startup for pictures in offline sav
+                    # file - so check timer status and start here
+                    if not self.offline_timer.isActive():
+                        print "Timer is off - activate now!"
+                        self.offline_timer.start(1200000)
+                    print l
+
+
+    def upload_offline_pictures(self, data):
+
+        # get all filenames from gallery, because you must check that
+        # they are not deleted already - thanks to TMO user "tavian"
+        # for reporting this bug!
+        dcim = os.listdir("/home/user/MyDocs/DCIM/")
+        pic = os.path.split(data)
+        pic = pic[-1]
+
+        print "Start with: "+str(data)
+
+        # check that the pic is still in the galery
+        if pic in dcim:
+            print "Picture was not deleted - start upload!"
+            self.start_upload(str(data))
+
+            print self.offline_picture_list
+
+            # If daemon starts and is online, and a picture waiting
+            # in the offline sav it's uploaded, but the pic is not in
+            # the self.offline_picture_list. So it's checked here!
+            if len(self.offline_picture_list):
+                self.offline_picture_list.remove(data)
+
+            print self.offline_picture_list
+
+            with open(__offline_sav_path__, "w") as f:
+                pickle.dump(self.offline_picture_list, f)
+
+        # else kicks out deleted picture(s) from offline list
+        else:
+            print "Picture was deleted and is now kicked out from offline list"
+            self.offline_picture_list.remove(data)
+
+
+# Notifications ------------------------------------------------------
+
+class NotificationHandler:
+    def __init__(self):
+        print "Notification Handler is running"
+
+        #(re)load settings to have latest
+        config.load_settings()
+
+    def show_notification(self, text):
+        """
+        It's called with a message, it checks which notification type
+        the user wanted and call it with the given message!
+        """
+
+        if config.notification_type == 'banner':
+            self.show_banner_notification(text)
+        if config.notification_type == 'EventFeed':
+            self.show_eventfeed_notification(text)
+        if config.notification_type == "off":
+            pass
+
+
+    def show_error_notification(self, text):
+        """
+        Shows error notifications on the GUI. Directly called and
+        allways a EventFeed Notification!
+        """
+        self.show_eventfeed_notification("Error: "+text)
+
+
+    def show_banner_notification(self, text):
+        """
+        Shows notificatations in banner style- called by standard
+        "show_notification" method!
+        """
+        message = notify.MNotification(notify.MNotification.DeviceEvent, '', '')
+        message.setImage('/usr/share/icons/hicolor/48x48/apps/fotoshare.png')
+        message.setBody(str(text))
+        message.publish()
+
+
+    def show_eventfeed_notification(self, text):
+        """
+        Show notifications in EventFeed syling - called by standard
+        "show_notification" method!
+        """
+        message = notify.MNotification(notify.MNotification.TransferEvent, '', '')
+        message.setImage('/usr/share/icons/hicolor/80x80/apps/fotoshare.png')
+        message.setSummary(str(text))
+        message.setBody('FotoShareN9')
+        message.publish()
+
+
+# Daemon start -------------------------------------------------------
+if __name__ == '__main__':
+    app = QtCore.QCoreApplication(sys.argv)
+    config = Config()
+    config.load_settings()
+    start = FotoShareDaemon()
+    sys.exit(app.exec_())
