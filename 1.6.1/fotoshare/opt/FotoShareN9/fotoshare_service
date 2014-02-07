@@ -349,6 +349,10 @@ class UploadManager:
         if not os.path.isdir(small_pic_path):
             os.makedirs(small_pic_path)
 
+        print self.data
+        filename = os.path.split(self.data)
+        self.filename = filename[-1]
+
         data_old = self.data
         self.data = small_pic_path+self.filename
         print self.data
