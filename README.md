@@ -30,7 +30,7 @@ This is the bunch of features:
 
 Build Information
 =================
-For 1.6.1 it's just adding acount data/secrets for Dropbox, Google Drive and Flickr and run the build script.
+For 1.6.2 it's just adding acount data/secrets for Dropbox, Google Drive and Flickr (in there libs/<service>_upload_plugin.py files and run the build script. The de_root_script.sh is used to set back the user to the default/non root system user - so change it to fit your system name.
 
 Licence
 =======
