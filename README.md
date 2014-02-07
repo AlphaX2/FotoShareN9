@@ -1,6 +1,6 @@
 ATTENTION!
 ==========
-The latest version is 1.6.1. Here you'll can get also the older version 0.9.7!
+The latest version is 1.6.2 Here you'll can get also the older version 0.9.7!
 Informations for writing plugins and some details will be added at the wiki in the near future.
 
 If you use the files offered here you have to add the api key and/or other credentials by your own, to get Dropbox, Google Drive ... to work. All standard server related options are working out of the box. 
